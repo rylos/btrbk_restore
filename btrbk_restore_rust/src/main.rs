@@ -81,15 +81,16 @@ fn main() {
         // Esegui btrfs subvolume snapshot
         let selected_folder = &folders[(choice - 1) as usize];
         let source_path = Path::new(snapshots_dir).join(selected_folder);
-
-        let (snapshot_type, snapshot_name) = if selected_folder.starts_with("@.") {
-            ("@", format!("{}/@", btr_pool_dir))
-        } else if selected_folder.starts_with("@home.") {
-            ("@home", format!("{}/@home", btr_pool_dir))
-        } else {
-            println!("Snapshot non valido");
-            exit(1);
+    
+        let (snapshot_type, snapshot_name) = match selected_folder.as_str() {
+            _ if selected_folder.starts_with("@.") => ("@", format!("{}/@{}", btr_pool_dir, selected_folder)),
+            _ if selected_folder.starts_with("@home.") => ("@home", format!("{}/@home/{}", btr_pool_dir, selected_folder)),
+            _ => {
+                eprintln!("Snapshot non valido");
+                return;
+            }
         };
+        
 
         Command::new("mv")
             .arg("--verbose")

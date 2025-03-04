@@ -4,4 +4,4 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-ansi_term = "0.12"
+ansi_term = "*"

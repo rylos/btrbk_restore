@@ -55,3 +55,4 @@ if 0 <= choice < len(folders):
         subprocess.run(["reboot"])
 else:
     print("Scelta non valida.")
+
