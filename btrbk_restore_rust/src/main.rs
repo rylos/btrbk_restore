@@ -97,7 +97,7 @@ fn main() {
             .arg(format!("{}/{}", btr_pool_dir, snapshot_type))
             .arg(format!("{}/{}.BROKEN", btr_pool_dir, snapshot_type))
             .status()
-            .expect("Errore nell'esecuzione del comando mv");
+            .expect("Errore nell'esecuzione del comando mv (snapshot->snapshot.BROKEN)");
 
         Command::new("btrfs")
             .arg("subvolume")
