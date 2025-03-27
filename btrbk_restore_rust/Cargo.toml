@@ -1,7 +1,7 @@
 [package]
 name = "btrbk_restore"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-ansi_term = "*"
+ncurses = "5.101.0"
