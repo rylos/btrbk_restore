@@ -163,6 +163,142 @@ impl App {
         self.status_timeout = timeout;
     }
     
+    fn create_snapshot(&self) -> (bool, String) {
+        use std::process::{Command, Stdio};
+        use std::io::{BufRead, BufReader};
+        
+        let (height, width) = get_max_yx();
+        
+        // Clear screen and show header
+        clear();
+        self.draw_header();
+        
+        // Show operation title
+        let title = "Creating Snapshots with btrbk...";
+        attron(COLOR_PAIR(2) | A_BOLD());
+        mvaddstr(4, (width - title.len() as i32) / 2, title);
+        attroff(COLOR_PAIR(2) | A_BOLD());
+        
+        // Show instructions
+        let instruction = "Press ESC to cancel or wait for completion";
+        attron(A_DIM());
+        mvaddstr(6, (width - instruction.len() as i32) / 2, instruction);
+        attroff(A_DIM());
+        
+        // Create output window border
+        let output_start_y = 8;
+        let output_height = height - 12;
+        let output_width = width - 4;
+        
+        // Draw border
+        for i in 0..output_height + 2 {
+            mvaddstr(output_start_y - 1 + i, 1, "|");
+            mvaddstr(output_start_y - 1 + i, width - 2, "|");
+        }
+        
+        let border = format!("+{}+", "-".repeat((width - 4) as usize));
+        mvaddstr(output_start_y - 1, 1, &border);
+        mvaddstr(output_start_y + output_height, 1, &border);
+        
+        refresh();
+        
+        // Set non-blocking input
+        timeout(50);
+        
+        match Command::new("btrbk")
+            .args(&["run", "--progress"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+        {
+            Ok(mut process) => {
+                let stdout = process.stdout.take().unwrap();
+                let reader = BufReader::new(stdout);
+                let mut output_lines = Vec::new();
+                let mut current_line = 0;
+                
+                for line in reader.lines() {
+                    // Check for ESC key
+                    let key = getch();
+                    if key == 27 {  // ESC
+                        let _ = process.kill();
+                        let _ = process.wait();
+                        timeout(100);  // Restore normal timeout
+                        return (false, "Operation cancelled by user".to_string());
+                    }
+                    
+                    match line {
+                        Ok(line_content) => {
+                            if !line_content.trim().is_empty() {
+                                output_lines.push(line_content.clone());
+                                
+                                // Display the line in the output area
+                                let display_y = output_start_y + output_lines.len() as i32 - 1 - current_line;
+                                if display_y >= output_start_y && display_y < output_start_y + output_height {
+                                    // Truncate line if too long
+                                    let display_line = if line_content.len() > (output_width - 2) as usize {
+                                        &line_content[..(output_width - 2) as usize]
+                                    } else {
+                                        &line_content
+                                    };
+                                    
+                                    // Clear line and add content
+                                    mvaddstr(display_y, 2, &" ".repeat((output_width - 2) as usize));
+                                    mvaddstr(display_y, 2, display_line);
+                                }
+                                
+                                // Auto-scroll if needed
+                                if output_lines.len() > output_height as usize {
+                                    current_line = output_lines.len() as i32 - output_height;
+                                }
+                                
+                                refresh();
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+                
+                // Wait for process to complete
+                let return_code = process.wait().map(|status| status.success()).unwrap_or(false);
+                
+                // Show completion message
+                let completion_msg = if return_code {
+                    "✓ Snapshots created successfully! Press any key to continue..."
+                } else {
+                    "✗ Error creating snapshots! Press any key to continue..."
+                };
+                
+                if return_code {
+                    attron(COLOR_PAIR(3) | A_BOLD());
+                } else {
+                    attron(COLOR_PAIR(4) | A_BOLD());
+                }
+                
+                mvaddstr(height - 2, (width - completion_msg.len() as i32) / 2, completion_msg);
+                
+                if return_code {
+                    attroff(COLOR_PAIR(3) | A_BOLD());
+                } else {
+                    attroff(COLOR_PAIR(4) | A_BOLD());
+                }
+                
+                refresh();
+                
+                // Wait for key press
+                timeout(-1);  // Blocking
+                getch();
+                timeout(100); // Restore normal timeout
+                
+                (return_code, format!("btrbk completed with status: {}", if return_code { "success" } else { "error" }))
+            }
+            Err(_) => {
+                timeout(100);  // Restore normal timeout
+                (false, "btrbk command not found".to_string())
+            }
+        }
+    }
+    
     fn purge_old_snapshots(&self) -> (i32, Vec<String>) {
         let snapshots_dir = &self.config.snapshots_dir;
         
@@ -257,12 +393,12 @@ impl App {
         let keys = if self.reboot_needed {
             vec![
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-                "S: Settings", "R: Refresh", "P: Purge", "H: REBOOT", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "H: REBOOT", "Q: Quit"
             ]
         } else {
             vec![
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-                "S: Settings", "R: Refresh", "P: Purge", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "Q: Quit"
             ]
         };
         let footer_text = keys.join(" | ");
@@ -615,6 +751,19 @@ impl App {
                     }
                 } else {
                     self.set_status("Purge cancelled", 50);
+                }
+            }
+            105 | 73 => {  // 'i' or 'I'
+                // Create new snapshots
+                if self.confirm_dialog("Create new snapshots with btrbk?") {
+                    let (success, message) = self.create_snapshot();
+                    if success {
+                        self.set_status("New snapshots created successfully!", 150);
+                    } else {
+                        self.set_status(&format!("Snapshot creation failed: {}", message), 150);
+                    }
+                } else {
+                    self.set_status("Snapshot creation cancelled", 50);
                 }
             }
             _ => {}

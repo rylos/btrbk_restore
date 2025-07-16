@@ -204,12 +204,12 @@ class TUIApp:
         if self.reboot_needed:
             keys = [
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-                "S: Settings", "R: Refresh", "P: Purge", "H: REBOOT", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "H: REBOOT", "Q: Quit"
             ]
         else:
             keys = [
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-                "S: Settings", "R: Refresh", "P: Purge", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "Q: Quit"
             ]
         footer_text = " | ".join(keys)
         
@@ -251,9 +251,122 @@ class TUIApp:
         self.status_message = message
         self.status_timeout = timeout
     
-    def purge_old_snapshots(self):
-        """Purge old snapshots, keeping only the most recent one for each type."""
-        snapshots_dir = self.config.get("snapshots_dir")
+    def create_snapshot(self, stdscr):
+        """Create new snapshots using btrbk run --progress."""
+        height, width = stdscr.getmaxyx()
+        
+        # Clear screen and show header
+        stdscr.clear()
+        self.draw_header(stdscr)
+        
+        # Show operation title
+        title = "Creating Snapshots with btrbk..."
+        stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+        stdscr.addstr(4, (width - len(title)) // 2, title)
+        stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+        
+        # Show instructions
+        instruction = "Press ESC to cancel or wait for completion"
+        stdscr.attron(curses.A_DIM)
+        stdscr.addstr(6, (width - len(instruction)) // 2, instruction)
+        stdscr.attroff(curses.A_DIM)
+        
+        # Create output window
+        output_start_y = 8
+        output_height = height - 12
+        output_width = width - 4
+        
+        # Draw border for output area
+        for i in range(output_height + 2):
+            stdscr.addstr(output_start_y - 1 + i, 1, "|")
+            stdscr.addstr(output_start_y - 1 + i, width - 2, "|")
+        
+        stdscr.addstr(output_start_y - 1, 1, "+" + "-" * (width - 4) + "+")
+        stdscr.addstr(output_start_y + output_height, 1, "+" + "-" * (width - 4) + "+")
+        
+        stdscr.refresh()
+        
+        # Set non-blocking input
+        stdscr.nodelay(True)
+        
+        try:
+            # Start btrbk process
+            process = subprocess.Popen(
+                ["btrbk", "run", "--progress"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
+            )
+            
+            output_lines = []
+            current_line = 0
+            
+            while True:
+                # Check for ESC key
+                key = stdscr.getch()
+                if key == 27:  # ESC
+                    process.terminate()
+                    process.wait()
+                    return False, "Operation cancelled by user"
+                
+                # Read output from process
+                line = process.stdout.readline()
+                if line:
+                    line = line.rstrip()
+                    if line:  # Only add non-empty lines
+                        output_lines.append(line)
+                        
+                        # Display the line in the output area
+                        display_y = output_start_y + len(output_lines) - 1 - current_line
+                        if display_y >= output_start_y and display_y < output_start_y + output_height:
+                            # Truncate line if too long
+                            display_line = line[:output_width - 2] if len(line) > output_width - 2 else line
+                            stdscr.addstr(display_y, 2, " " * (output_width - 2))  # Clear line
+                            stdscr.addstr(display_y, 2, display_line)
+                        
+                        # Auto-scroll if needed
+                        if len(output_lines) > output_height:
+                            current_line = len(output_lines) - output_height
+                        
+                        stdscr.refresh()
+                
+                # Check if process finished
+                if process.poll() is not None:
+                    break
+                
+                # Small delay to prevent high CPU usage
+                curses.napms(50)
+            
+            # Get final return code
+            return_code = process.returncode
+            
+            # Show completion message
+            if return_code == 0:
+                completion_msg = "✓ Snapshots created successfully! Press any key to continue..."
+                stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+            else:
+                completion_msg = "✗ Error creating snapshots! Press any key to continue..."
+                stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+            
+            stdscr.addstr(height - 2, (width - len(completion_msg)) // 2, completion_msg)
+            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+            stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+            stdscr.refresh()
+            
+            # Wait for key press
+            stdscr.nodelay(False)
+            stdscr.getch()
+            
+            return return_code == 0, f"btrbk completed with return code {return_code}"
+            
+        except FileNotFoundError:
+            return False, "btrbk command not found"
+        except Exception as e:
+            return False, f"Error running btrbk: {str(e)}"
+        finally:
+            # Restore normal input mode
+            stdscr.nodelay(False)
         
         try:
             # Get all snapshot directories
@@ -607,6 +720,16 @@ class TUIApp:
                     self.set_status(f"Purged {deleted_count} old snapshots successfully", 150)
             else:
                 self.set_status("Purge cancelled")
+        elif key in [ord('i'), ord('I')]:
+            # Create new snapshots
+            if self.confirm_dialog(stdscr, "Create new snapshots with btrbk?"):
+                success, message = self.create_snapshot(stdscr)
+                if success:
+                    self.set_status("New snapshots created successfully!", 150)
+                else:
+                    self.set_status(f"Snapshot creation failed: {message}", 150)
+            else:
+                self.set_status("Snapshot creation cancelled")
     
     def handle_snapshot_selection(self, stdscr, root_snapshots, home_snapshots, games_snapshots):
         """Handle snapshot selection and restoration."""
