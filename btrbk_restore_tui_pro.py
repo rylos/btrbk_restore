@@ -294,7 +294,7 @@ class TUIApp:
             process = subprocess.Popen(
                 ["btrbk", "run", "--progress"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.STDOUT,  # Merge stderr into stdout
                 universal_newlines=True,
                 bufsize=1
             )

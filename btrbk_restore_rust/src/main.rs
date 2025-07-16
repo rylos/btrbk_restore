@@ -208,26 +208,56 @@ impl App {
         match Command::new("btrbk")
             .args(&["run", "--progress"])
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())  // Capture stderr too
             .spawn()
         {
             Ok(mut process) => {
                 let stdout = process.stdout.take().unwrap();
-                let reader = BufReader::new(stdout);
+                let stderr = process.stderr.take().unwrap();
+                
+                // Use threads to read both stdout and stderr
+                use std::sync::mpsc;
+                use std::thread;
+                
+                let (tx, rx) = mpsc::channel();
+                let tx_stderr = tx.clone();
+                
+                // Thread for stdout
+                let stdout_thread = thread::spawn(move || {
+                    let reader = BufReader::new(stdout);
+                    for line in reader.lines() {
+                        if let Ok(line_content) = line {
+                            let _ = tx.send(line_content);
+                        }
+                    }
+                });
+                
+                // Thread for stderr
+                let stderr_thread = thread::spawn(move || {
+                    let reader = BufReader::new(stderr);
+                    for line in reader.lines() {
+                        if let Ok(line_content) = line {
+                            let _ = tx_stderr.send(line_content);
+                        }
+                    }
+                });
+                
                 let mut output_lines = Vec::new();
                 let mut current_line = 0;
                 
-                for line in reader.lines() {
+                // Read from both stdout and stderr
+                loop {
                     // Check for ESC key
                     let key = getch();
                     if key == 27 {  // ESC
                         let _ = process.kill();
                         let _ = process.wait();
-                        timeout(100);  // Restore normal timeout
+                        timeout(100);
                         return (false, "Operation cancelled by user".to_string());
                     }
                     
-                    match line {
+                    // Try to receive a line (non-blocking)
+                    match rx.try_recv() {
                         Ok(line_content) => {
                             if !line_content.trim().is_empty() {
                                 output_lines.push(line_content.clone());
@@ -255,42 +285,82 @@ impl App {
                                 refresh();
                             }
                         }
-                        Err(_) => break,
+                        Err(mpsc::TryRecvError::Empty) => {
+                            // No data available, check if process is still running
+                            if let Some(status) = process.try_wait().unwrap_or(None) {
+                                // Process finished, drain remaining messages
+                                while let Ok(line_content) = rx.try_recv() {
+                                    if !line_content.trim().is_empty() {
+                                        output_lines.push(line_content.clone());
+                                        
+                                        let display_y = output_start_y + output_lines.len() as i32 - 1 - current_line;
+                                        if display_y >= output_start_y && display_y < output_start_y + output_height {
+                                            let display_line = if line_content.len() > (output_width - 2) as usize {
+                                                &line_content[..(output_width - 2) as usize]
+                                            } else {
+                                                &line_content
+                                            };
+                                            
+                                            mvaddstr(display_y, 2, &" ".repeat((output_width - 2) as usize));
+                                            mvaddstr(display_y, 2, display_line);
+                                        }
+                                        
+                                        if output_lines.len() > output_height as usize {
+                                            current_line = output_lines.len() as i32 - output_height;
+                                        }
+                                        
+                                        refresh();
+                                    }
+                                }
+                                
+                                // Wait for threads to finish
+                                let _ = stdout_thread.join();
+                                let _ = stderr_thread.join();
+                                
+                                let return_code = status.success();
+                                
+                                // Show completion message
+                                let completion_msg = if return_code {
+                                    "✓ Snapshots created successfully! Press any key to continue..."
+                                } else {
+                                    "✗ Error creating snapshots! Press any key to continue..."
+                                };
+                                
+                                if return_code {
+                                    attron(COLOR_PAIR(3) | A_BOLD());
+                                } else {
+                                    attron(COLOR_PAIR(4) | A_BOLD());
+                                }
+                                
+                                mvaddstr(height - 2, (width - completion_msg.len() as i32) / 2, completion_msg);
+                                
+                                if return_code {
+                                    attroff(COLOR_PAIR(3) | A_BOLD());
+                                } else {
+                                    attroff(COLOR_PAIR(4) | A_BOLD());
+                                }
+                                
+                                refresh();
+                                
+                                // Wait for key press
+                                timeout(-1);
+                                getch();
+                                timeout(100);
+                                
+                                return (return_code, format!("btrbk completed with status: {}", if return_code { "success" } else { "error" }));
+                            }
+                            
+                            // Small delay to prevent high CPU usage
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                        Err(mpsc::TryRecvError::Disconnected) => {
+                            // Channel closed, process finished
+                            let return_code = process.wait().map(|status| status.success()).unwrap_or(false);
+                            timeout(100);
+                            return (return_code, format!("btrbk completed with status: {}", if return_code { "success" } else { "error" }));
+                        }
                     }
                 }
-                
-                // Wait for process to complete
-                let return_code = process.wait().map(|status| status.success()).unwrap_or(false);
-                
-                // Show completion message
-                let completion_msg = if return_code {
-                    "✓ Snapshots created successfully! Press any key to continue..."
-                } else {
-                    "✗ Error creating snapshots! Press any key to continue..."
-                };
-                
-                if return_code {
-                    attron(COLOR_PAIR(3) | A_BOLD());
-                } else {
-                    attron(COLOR_PAIR(4) | A_BOLD());
-                }
-                
-                mvaddstr(height - 2, (width - completion_msg.len() as i32) / 2, completion_msg);
-                
-                if return_code {
-                    attroff(COLOR_PAIR(3) | A_BOLD());
-                } else {
-                    attroff(COLOR_PAIR(4) | A_BOLD());
-                }
-                
-                refresh();
-                
-                // Wait for key press
-                timeout(-1);  // Blocking
-                getch();
-                timeout(100); // Restore normal timeout
-                
-                (return_code, format!("btrbk completed with status: {}", if return_code { "success" } else { "error" }))
             }
             Err(_) => {
                 timeout(100);  // Restore normal timeout
