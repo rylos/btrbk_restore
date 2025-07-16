@@ -151,7 +151,7 @@ impl App {
         init_pair(2, COLOR_RED, -1);              // Headers
         init_pair(3, COLOR_GREEN, -1);            // Success
         init_pair(4, COLOR_YELLOW, -1);           // Warning
-        init_pair(5, COLOR_WHITE, COLOR_BLUE);    // Status bar
+        init_pair(5, COLOR_BLACK, COLOR_BLUE);    // Status bar
         init_pair(6, COLOR_CYAN, -1);             // Info
     }
     
