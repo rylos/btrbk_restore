@@ -102,10 +102,12 @@ sudo ./target/release/btrbk_restore
 ## Funzionalità
 
 ### Versione CLI (`btrbk_restore.py`)
-- Lista numerata di tutti gli snapshot
-- Selezione tramite numero
-- Supporto completo per @, @home, @games
-- Interfaccia semplice per uso occasionale
+- **Lista numerata** di tutti gli snapshot organizzati per tipo
+- **Selezione tramite numero** con interfaccia semplice
+- **Supporto completo dinamico** per qualsiasi configurazione (@, @home, @games, @custom, @backup, ecc.)
+- **Interfaccia semplice** per uso occasionale
+- **Gestione automatica** dei backup .BROKEN
+- **Rilevamento automatico** di tutti i tipi di snapshot presenti
 
 ### Versione TUI Professionale (`btrbk_restore_tui_pro.py`)
 - **Interfaccia dinamica**: Colonne che si adattano automaticamente ai gruppi trovati
