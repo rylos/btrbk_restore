@@ -112,6 +112,7 @@ Il tool gestisce snapshot con questa nomenclatura:
 - **ENTER**: Selezione e ripristino snapshot
 - **S**: Accesso schermata settaggi
 - **R**: Refresh lista snapshot
+- **H**: Riavvio sistema (quando necessario)
 - **Q**: Uscita dall'applicazione
 
 #### Schermata Settaggi:
@@ -120,6 +121,12 @@ Il tool gestisce snapshot con questa nomenclatura:
 - **SPACE**: Toggle valore (per booleani)
 - **S**: Salvataggio manuale (opzionale, auto-salvataggio attivo)
 - **ESC**: Ritorno alla schermata principale
+
+### Funzionalità Reboot Intelligente:
+- **Tasto R**: Sempre disponibile per refresh lista snapshot
+- **Tasto H**: Appare nel footer dopo un restore per riavvio rapido
+- **Warning persistente**: Barra di stato mostra "⚠ REBOOT REQUIRED" dopo ogni restore
+- **Tasti dedicati**: R per refresh, H per reboot - nessuna confusione
 
 ## File Desktop
 

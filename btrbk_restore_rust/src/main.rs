@@ -36,6 +36,7 @@ struct App {
     selected_col: i32,
     status_message: String,
     status_timeout: i32,
+    reboot_needed: bool,  // Track if reboot is needed
 }
 
 impl App {
@@ -54,6 +55,7 @@ impl App {
             selected_col: 0,
             status_message: String::new(),
             status_timeout: 0,
+            reboot_needed: false,  // Initialize reboot flag
         };
         
         app.load_config();
@@ -176,10 +178,18 @@ impl App {
     fn draw_footer(&self) {
         let (height, width) = get_max_yx();
         
-        let keys = vec![
-            "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-            "S: Settings", "R: Refresh", "Q: Quit"
-        ];
+        // Key bindings - show H: Reboot when needed
+        let keys = if self.reboot_needed {
+            vec![
+                "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
+                "S: Settings", "R: Refresh", "H: REBOOT", "Q: Quit"
+            ]
+        } else {
+            vec![
+                "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
+                "S: Settings", "R: Refresh", "Q: Quit"
+            ]
+        };
         let footer_text = keys.join(" | ");
         
         attron(COLOR_PAIR(5));
@@ -189,8 +199,16 @@ impl App {
     }
     
     fn draw_status(&mut self) {
-        if !self.status_message.is_empty() && self.status_timeout > 0 {
-            let (height, width) = get_max_yx();
+        let (height, width) = get_max_yx();
+        
+        // Show reboot warning if needed (persistent)
+        if self.reboot_needed {
+            attron(COLOR_PAIR(4) | A_BOLD());  // Yellow/Warning color
+            let warning_msg = "WARNING: REBOOT REQUIRED - Press H to reboot system";
+            mvaddstr(height - 3, 0, &warning_msg[..std::cmp::min(warning_msg.len(), width as usize - 1)]);
+            attroff(COLOR_PAIR(4) | A_BOLD());
+        } else if !self.status_message.is_empty() && self.status_timeout > 0 {
+            // Show temporary status messages
             attron(COLOR_PAIR(6));
             mvaddstr(height - 3, 0, &self.status_message[..std::cmp::min(self.status_message.len(), width as usize - 1)]);
             attroff(COLOR_PAIR(6));
@@ -476,7 +494,8 @@ impl App {
                 refresh();
                 
                 if self.restore_snapshot(snapshot, snapshot_type) {
-                    self.set_status("Snapshot restored successfully!", 100);
+                    self.reboot_needed = true;  // Set reboot flag
+                    self.set_status("Snapshot restored! Press H to reboot or continue working", 200);
                     if self.confirm_dialog("Reboot system now?") {
                         run_command(&["reboot"]);
                     }
@@ -489,7 +508,20 @@ impl App {
                 self.selected_row = 0;
             }
             114 | 82 => {  // 'r' or 'R'
+                // Always refresh
                 self.set_status("Refreshed snapshot list", 50);
+            }
+            104 | 72 => {  // 'h' or 'H'
+                // Reboot if needed
+                if self.reboot_needed {
+                    if self.confirm_dialog("Reboot system now?") {
+                        run_command(&["reboot"]);
+                    } else {
+                        self.set_status("Reboot cancelled", 50);
+                    }
+                } else {
+                    self.set_status("No reboot needed", 50);
+                }
             }
             _ => {}
         }

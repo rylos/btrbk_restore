@@ -159,6 +159,7 @@ class TUIApp:
         self.selected_col = 0  # 0=root, 1=home, 2=games
         self.status_message = ""
         self.status_timeout = 0
+        self.reboot_needed = False  # Track if reboot is needed
     
     def init_colors(self):
         """Initialize color pairs."""
@@ -196,11 +197,17 @@ class TUIApp:
         """Draw application footer with key bindings."""
         height, width = stdscr.getmaxyx()
         
-        # Key bindings
-        keys = [
-            "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-            "S: Settings", "R: Refresh", "Q: Quit"
-        ]
+        # Key bindings - show H: Reboot when needed
+        if self.reboot_needed:
+            keys = [
+                "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
+                "S: Settings", "R: Refresh", "H: REBOOT", "Q: Quit"
+            ]
+        else:
+            keys = [
+                "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
+                "S: Settings", "R: Refresh", "Q: Quit"
+            ]
         footer_text = " | ".join(keys)
         
         try:
@@ -213,8 +220,19 @@ class TUIApp:
     
     def draw_status(self, stdscr):
         """Draw status message if any."""
-        if self.status_message and self.status_timeout > 0:
-            height, width = stdscr.getmaxyx()
+        height, width = stdscr.getmaxyx()
+        
+        # Show reboot warning if needed (persistent)
+        if self.reboot_needed:
+            try:
+                stdscr.attron(curses.color_pair(4) | curses.A_BOLD)  # Yellow/Warning color
+                warning_msg = "⚠ REBOOT REQUIRED - Press H to reboot system ⚠"
+                stdscr.addstr(height - 3, 0, warning_msg[:width-1].ljust(width-1))
+                stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+            except curses.error:
+                pass
+        elif self.status_message and self.status_timeout > 0:
+            # Show temporary status messages
             try:
                 stdscr.attron(curses.color_pair(6))
                 stdscr.addstr(height - 3, 0, self.status_message[:width-1].ljust(width-1))
@@ -504,7 +522,17 @@ class TUIApp:
             self.current_screen = "settings"
             self.selected_row = 0
         elif key in [ord('r'), ord('R')]:
+            # Always refresh
             self.set_status("Refreshed snapshot list")
+        elif key in [ord('h'), ord('H')]:
+            # Reboot if needed
+            if self.reboot_needed:
+                if self.confirm_dialog(stdscr, "Reboot system now?"):
+                    subprocess.run(["reboot"])
+                else:
+                    self.set_status("Reboot cancelled")
+            else:
+                self.set_status("No reboot needed")
     
     def handle_snapshot_selection(self, stdscr, root_snapshots, home_snapshots, games_snapshots):
         """Handle snapshot selection and restoration."""
@@ -530,9 +558,10 @@ class TUIApp:
         stdscr.refresh()
         
         if self.snapshot_manager.restore_snapshot(snapshot, snapshot_type):
-            self.set_status("Snapshot restored successfully!", 100)
+            self.reboot_needed = True  # Set reboot flag
+            self.set_status("Snapshot restored! Press H to reboot or continue working", 200)
             
-            # Ask for reboot
+            # Ask for immediate reboot
             if self.confirm_dialog(stdscr, "Reboot system now?"):
                 subprocess.run(["reboot"])
         else:
