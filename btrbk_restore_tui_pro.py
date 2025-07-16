@@ -186,7 +186,7 @@ class TUIApp:
         curses.init_pair(2, curses.COLOR_RED, -1)                    # Headers
         curses.init_pair(3, curses.COLOR_GREEN, -1)                  # Success
         curses.init_pair(4, curses.COLOR_YELLOW, -1)                 # Warning
-        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_BLUE)   # Status bar
+        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLACK)  # Status bar
         curses.init_pair(6, curses.COLOR_CYAN, -1)                   # Info
     
     def draw_header(self, stdscr):
