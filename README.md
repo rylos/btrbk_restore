@@ -10,6 +10,8 @@ Questo progetto fornisce strumenti per ripristinare facilmente snapshot di subvo
 - Selezionare e ripristinare snapshot specifici
 - Gestire automaticamente il backup dei subvolumi esistenti
 - Configurazione persistente e condivisa tra le versioni
+- Pulizia intelligente degli snapshot vecchi
+- Riavvio sistema con indicatori visivi
 - Opzionalmente riavviare il sistema dopo il ripristino
 
 ## Versioni Disponibili
@@ -34,7 +36,7 @@ python3 (con modulo curses incluso)
 
 ### Per la versione Rust:
 ```bash
-# Installazione Rust (edition 2024)
+# Installazione Rust (edition 2021)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Build del progetto
@@ -85,6 +87,8 @@ sudo ./target/release/btrbk_restore
 - **Messaggi di stato**: Feedback in tempo reale delle operazioni
 - **Temi e colori**: Interfaccia professionale con evidenziazione
 - **Auto-salvataggio**: Ogni modifica viene salvata automaticamente
+- **Purge intelligente**: Pulizia automatica snapshot vecchi
+- **Sistema reboot**: Indicatori visivi e shortcut dedicati
 
 ### Versione TUI Rust (`btrbk_restore_rust/`)
 - **Performance ottimizzata**: Implementazione nativa in Rust
@@ -93,7 +97,8 @@ sudo ./target/release/btrbk_restore
 - **Schermata settaggi completa**: Stesse funzionalità di modifica della versione Python
 - **Gestione memoria efficiente**: Ideale per sistemi con risorse limitate
 - **Compatibilità totale**: Zero differenze funzionali con la versione Python Pro
-- **Compilazione ottimizzata**: Rust edition 2024, zero errori e warning
+- **Compilazione ottimizzata**: Rust edition 2021, zero errori e warning
+- **Purge e reboot**: Tutte le funzionalità avanzate implementate
 
 ## Struttura Snapshot Supportata
 
@@ -131,12 +136,15 @@ Il tool gestisce snapshot con questa nomenclatura:
 - **Elimina** tutti gli snapshot più vecchi automaticamente
 - **Conferma** prima dell'operazione per sicurezza
 - **Feedback** dettagliato su quanti snapshot sono stati eliminati
+- **Gestione errori**: Continua l'operazione anche se singole eliminazioni falliscono
+- **Ottimizzazione spazio**: Libera automaticamente spazio disco mantenendo i backup essenziali
 
 #### Reboot Intelligente:
 - **Tasto R**: Sempre disponibile per refresh lista snapshot
 - **Tasto H**: Appare nel footer dopo un restore per riavvio rapido
 - **Warning persistente**: Barra di stato mostra "⚠ REBOOT REQUIRED" dopo ogni restore
 - **Tasti dedicati**: R per refresh, H per reboot, P per purge - nessuna confusione
+- **Indicatori visivi**: Footer dinamico che cambia in base al contesto
 
 ## File Desktop
 
@@ -145,6 +153,12 @@ Incluso `snapshot-restore.desktop` per l'integrazione nel desktop environment.
 ## Sicurezza
 
 ⚠️ **ATTENZIONE**: Questi strumenti richiedono privilegi di root e modificano i subvolumi del sistema. Usare con cautela e sempre dopo aver verificato la presenza di backup validi.
+
+### Misure di Sicurezza Implementate:
+- **Conferme obbligatorie**: Dialog di conferma per tutte le operazioni critiche
+- **Backup automatico**: I subvolumi esistenti vengono rinominati in .BROKEN prima del ripristino
+- **Gestione errori**: Operazioni robuste con fallback e messaggi di errore chiari
+- **Auto-cleanup opzionale**: Pulizia automatica configurabile dei file .BROKEN
 
 ## Compatibilità
 
@@ -200,12 +214,14 @@ Entrambe le versioni TUI (Python Pro e Rust) condividono la configurazione salva
 - ✅ Configurazione avanzata e personalizzazione
 - ✅ Quando Python è preferito per modifiche
 - ✅ Sviluppo e debugging
+- ✅ Gestione completa degli snapshot
 
 ### **Rust (`btrbk_restore_rust/`)**
 - ✅ Massime performance e velocità
 - ✅ Sistemi con Python limitato o assente
 - ✅ Ambienti di produzione
 - ✅ Quando serve efficienza di memoria
+- ✅ Tutte le funzionalità della versione Pro
 
 ## Vantaggi dell'Allineamento Completo
 
@@ -218,6 +234,7 @@ Entrambe le versioni TUI (Python Pro e Rust) condividono la configurazione salva
 - Stessa interfaccia e controlli
 - Stesse opzioni di configurazione
 - Stesso comportamento e workflow
+- Stesse funzionalità avanzate (purge, reboot, settaggi)
 
 ### **Flessibilità Totale:**
 - Passa da Python a Rust senza perdere configurazioni
@@ -237,7 +254,7 @@ btrbk_restore/
 ├── btrbk_restore.py              # Versione CLI semplice
 ├── btrbk_restore_tui_pro.py      # Versione TUI professionale Python
 ├── btrbk_restore_rust/           # Versione TUI professionale Rust
-│   ├── Cargo.toml               # Configurazione Rust (edition 2024)
+│   ├── Cargo.toml               # Configurazione Rust (edition 2021)
 │   ├── src/main.rs              # Codice sorgente Rust
 │   └── target/release/          # Binario compilato
 ├── snapshot-restore.desktop      # File desktop per integrazione DE
@@ -248,17 +265,28 @@ btrbk_restore/
 
 ### **Linguaggi utilizzati:**
 - **Python 3**: Versioni CLI e TUI Pro
-- **Rust 2024**: Versione TUI performante
+- **Rust 2021**: Versione TUI performante
 - **JSON**: Configurazione condivisa
 
 ### **Dipendenze:**
-- **Python**: modulo `curses`, `json`, `pathlib`
+- **Python**: modulo `curses`, `json`, `pathlib`, `subprocess`, `os`
 - **Rust**: `ncurses`, `serde`, `serde_json`, `chrono`, `dirs`, `libc`
 
 ### **Testing:**
 - Testato su Arch Linux con KDE Plasma 6
 - Compatibile con altri desktop environment Linux
 - Supporto completo per filesystem Btrfs
+
+## Workflow Tipico di Utilizzo
+
+1. **Avvio**: `sudo ./btrbk_restore_tui_pro.py` o versione Rust
+2. **Navigazione**: Usa frecce per esplorare snapshot disponibili
+3. **Configurazione**: Premi `S` per modificare settaggi se necessario
+4. **Selezione**: Scegli snapshot da ripristinare con `ENTER`
+5. **Conferma**: Conferma l'operazione di ripristino
+6. **Reboot**: Scegli se riavviare immediatamente o continuare
+7. **Pulizia**: Usa `P` per eliminare snapshot vecchi quando necessario
+8. **Riavvio rapido**: Usa `H` per riavviare quando indicato
 
 ## Licenza
 
@@ -275,3 +303,5 @@ Contributi benvenuti! Il progetto dimostra l'implementazione della stessa funzio
 - Gestione robusta degli errori
 - Performance ottimizzate per ogni linguaggio
 - Documentazione completa e aggiornata
+- Funzionalità avanzate di gestione snapshot
+- Sistema di sicurezza integrato
