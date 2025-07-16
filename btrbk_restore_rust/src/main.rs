@@ -776,6 +776,8 @@ impl App {
 fn run_command(cmd: &[&str]) -> bool {
     Command::new(cmd[0])
         .args(&cmd[1..])
+        .stdout(std::process::Stdio::null())  // Hide stdout
+        .stderr(std::process::Stdio::null())  // Hide stderr
         .status()
         .map(|status| status.success())
         .unwrap_or(false)

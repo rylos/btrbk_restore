@@ -135,14 +135,17 @@ class SnapshotManager:
         
         try:
             # Move current subvolume to .BROKEN
-            subprocess.run(["mv", current_subvol, broken_subvol], check=True)
+            subprocess.run(["mv", current_subvol, broken_subvol], 
+                         check=True, capture_output=True, text=True)
             
             # Create new snapshot
-            subprocess.run(["btrfs", "subvolume", "snapshot", source_path, new_subvol], check=True)
+            subprocess.run(["btrfs", "subvolume", "snapshot", source_path, new_subvol], 
+                         check=True, capture_output=True, text=True)
             
             # Auto cleanup if enabled
             if self.config.get("auto_cleanup", False):
-                subprocess.run(["btrfs", "subvolume", "delete", broken_subvol], check=True)
+                subprocess.run(["btrfs", "subvolume", "delete", broken_subvol], 
+                             check=True, capture_output=True, text=True)
             
             return True
         except subprocess.CalledProcessError:
@@ -583,7 +586,7 @@ class TUIApp:
             # Reboot if needed
             if self.reboot_needed:
                 if self.confirm_dialog(stdscr, "Reboot system now?"):
-                    subprocess.run(["reboot"])
+                    subprocess.run(["reboot"], capture_output=True)
                 else:
                     self.set_status("Reboot cancelled")
             else:
@@ -634,7 +637,7 @@ class TUIApp:
             
             # Ask for immediate reboot
             if self.confirm_dialog(stdscr, "Reboot system now?"):
-                subprocess.run(["reboot"])
+                subprocess.run(["reboot"], capture_output=True)
         else:
             self.set_status("Failed to restore snapshot!", 100)
     
