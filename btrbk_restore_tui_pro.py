@@ -1,0 +1,621 @@
+#!/usr/bin/env python3
+"""
+BTRBK Restore Tool - Professional TUI Version
+A professional terminal user interface for restoring Btrfs snapshots created with btrbk.
+"""
+
+import curses
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+# Configuration file path
+CONFIG_FILE = Path.home() / ".config" / "btrbk_restore" / "config.json"
+
+# Default configuration
+DEFAULT_CONFIG = {
+    "btr_pool_dir": "/mnt/btr_pool",
+    "snapshots_dir": "/mnt/btr_pool/btrbk_snapshots",
+    "auto_cleanup": False,
+    "confirm_actions": True,
+    "show_timestamps": True,
+    "theme": "default"
+}
+
+class Config:
+    """Configuration manager for the application."""
+    
+    def __init__(self):
+        self.data = DEFAULT_CONFIG.copy()
+        self.load()
+    
+    def load(self):
+        """Load configuration from file."""
+        try:
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE, 'r') as f:
+                    saved_config = json.load(f)
+                    # Merge saved config with defaults (in case new keys were added)
+                    for key, value in saved_config.items():
+                        if key in DEFAULT_CONFIG:  # Only load known keys
+                            self.data[key] = value
+        except Exception as e:
+            # If loading fails, use defaults
+            pass
+    
+    def save(self):
+        """Save configuration to file."""
+        try:
+            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(self.data, f, indent=2)
+            return True
+        except Exception as e:
+            return False
+    
+    def get(self, key: str, default=None):
+        """Get configuration value."""
+        return self.data.get(key, default)
+    
+    def set(self, key: str, value):
+        """Set configuration value."""
+        if key in DEFAULT_CONFIG:  # Only allow known keys
+            self.data[key] = value
+            return True
+        return False
+
+class SnapshotManager:
+    """Manager for snapshot operations."""
+    
+    def __init__(self, config: Config):
+        self.config = config
+    
+    def get_snapshots(self) -> Tuple[List[str], List[str], List[str]]:
+        """Get available snapshots sorted by date (newest first)."""
+        snapshots_dir = self.config.get("snapshots_dir")
+        try:
+            folders = [f for f in os.listdir(snapshots_dir) 
+                      if os.path.isdir(os.path.join(snapshots_dir, f))]
+            
+            root_snapshots = sorted([f for f in folders if f.startswith("@.") and not f.startswith("@home.") and not f.startswith("@games.")], reverse=True)
+            home_snapshots = sorted([f for f in folders if f.startswith("@home.")], reverse=True)
+            games_snapshots = sorted([f for f in folders if f.startswith("@games.")], reverse=True)
+            
+            return root_snapshots, home_snapshots, games_snapshots
+        except Exception:
+            return [], [], []
+    
+    def format_snapshot_name(self, snapshot: str) -> str:
+        """Format snapshot name for display."""
+        if not self.config.get("show_timestamps", True):
+            return snapshot
+        
+        # Extract timestamp from snapshot name
+        try:
+            if snapshot.startswith("@."):
+                timestamp_str = snapshot[2:]
+            elif snapshot.startswith("@home."):
+                timestamp_str = snapshot[6:]
+            elif snapshot.startswith("@games."):
+                timestamp_str = snapshot[7:]
+            else:
+                return snapshot
+            
+            # Parse timestamp (format: YYYYMMDD_HHMMSS)
+            dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+            return f"{snapshot} ({dt.strftime('%Y-%m-%d %H:%M:%S')})"
+        except ValueError:
+            return snapshot
+    
+    def restore_snapshot(self, snapshot: str, snapshot_type: str) -> bool:
+        """Restore a snapshot."""
+        btr_pool_dir = self.config.get("btr_pool_dir")
+        snapshots_dir = self.config.get("snapshots_dir")
+        
+        source_path = os.path.join(snapshots_dir, snapshot)
+        
+        if snapshot_type == "root":
+            current_subvol = os.path.join(btr_pool_dir, "@")
+            broken_subvol = os.path.join(btr_pool_dir, "@.BROKEN")
+            new_subvol = os.path.join(btr_pool_dir, "@")
+        elif snapshot_type == "home":
+            current_subvol = os.path.join(btr_pool_dir, "@home")
+            broken_subvol = os.path.join(btr_pool_dir, "@home.BROKEN")
+            new_subvol = os.path.join(btr_pool_dir, "@home")
+        elif snapshot_type == "games":
+            current_subvol = os.path.join(btr_pool_dir, "@games")
+            broken_subvol = os.path.join(btr_pool_dir, "@games.BROKEN")
+            new_subvol = os.path.join(btr_pool_dir, "@games")
+        else:
+            return False
+        
+        try:
+            # Move current subvolume to .BROKEN
+            subprocess.run(["mv", current_subvol, broken_subvol], check=True)
+            
+            # Create new snapshot
+            subprocess.run(["btrfs", "subvolume", "snapshot", source_path, new_subvol], check=True)
+            
+            # Auto cleanup if enabled
+            if self.config.get("auto_cleanup", False):
+                subprocess.run(["btrfs", "subvolume", "delete", broken_subvol], check=True)
+            
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+class TUIApp:
+    """Main TUI application."""
+    
+    def __init__(self):
+        self.config = Config()
+        self.snapshot_manager = SnapshotManager(self.config)
+        self.current_screen = "main"
+        self.selected_row = 0
+        self.selected_col = 0  # 0=root, 1=home, 2=games
+        self.status_message = ""
+        self.status_timeout = 0
+    
+    def init_colors(self):
+        """Initialize color pairs."""
+        curses.start_color()
+        curses.use_default_colors()
+        
+        # Color pairs
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)    # Selected item
+        curses.init_pair(2, curses.COLOR_RED, -1)                    # Headers
+        curses.init_pair(3, curses.COLOR_GREEN, -1)                  # Success
+        curses.init_pair(4, curses.COLOR_YELLOW, -1)                 # Warning
+        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLUE)   # Status bar
+        curses.init_pair(6, curses.COLOR_CYAN, -1)                   # Info
+    
+    def draw_header(self, stdscr):
+        """Draw application header."""
+        height, width = stdscr.getmaxyx()
+        
+        # Title bar
+        title = "BTRBK Restore Tool v2.0"
+        try:
+            stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+            stdscr.addstr(0, 0, title.center(width)[:width-1])
+            stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+        except curses.error:
+            pass
+        
+        # Separator
+        try:
+            stdscr.addstr(1, 0, "-" * (width-1))
+        except curses.error:
+            pass
+    
+    def draw_footer(self, stdscr):
+        """Draw application footer with key bindings."""
+        height, width = stdscr.getmaxyx()
+        
+        # Key bindings
+        keys = [
+            "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
+            "S: Settings", "R: Refresh", "Q: Quit"
+        ]
+        footer_text = " | ".join(keys)
+        
+        try:
+            stdscr.attron(curses.color_pair(5))
+            stdscr.addstr(height - 2, 0, "-" * (width-1))
+            stdscr.addstr(height - 1, 0, footer_text[:width-1].ljust(width-1))
+            stdscr.attroff(curses.color_pair(5))
+        except curses.error:
+            pass
+    
+    def draw_status(self, stdscr):
+        """Draw status message if any."""
+        if self.status_message and self.status_timeout > 0:
+            height, width = stdscr.getmaxyx()
+            try:
+                stdscr.attron(curses.color_pair(6))
+                stdscr.addstr(height - 3, 0, self.status_message[:width-1].ljust(width-1))
+                stdscr.attroff(curses.color_pair(6))
+            except curses.error:
+                pass
+            self.status_timeout -= 1
+        elif self.status_timeout <= 0:
+            self.status_message = ""
+    
+    def set_status(self, message: str, timeout: int = 50):
+        """Set status message with timeout."""
+        self.status_message = message
+        self.status_timeout = timeout
+    
+    def draw_main_screen(self, stdscr):
+        """Draw main snapshot selection screen."""
+        height, width = stdscr.getmaxyx()
+        
+        root_snapshots, home_snapshots, games_snapshots = self.snapshot_manager.get_snapshots()
+        
+        if not root_snapshots and not home_snapshots and not games_snapshots:
+            try:
+                stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+                stdscr.addstr(height // 2, (width - 20) // 2, "No snapshots found!")
+                stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+            except curses.error:
+                pass
+            return
+        
+        # Calculate column positions for three columns
+        col1_x = 2
+        col_width = (width - 8) // 3  # Divide available width by 3 columns
+        col2_x = col1_x + col_width
+        col3_x = col2_x + col_width
+        
+        start_y = 4
+        
+        # Draw column headers
+        try:
+            stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+            stdscr.addstr(start_y - 1, col1_x, f"ROOT ({len(root_snapshots)})")
+            stdscr.addstr(start_y - 1, col2_x, f"HOME ({len(home_snapshots)})")
+            stdscr.addstr(start_y - 1, col3_x, f"GAMES ({len(games_snapshots)})")
+            stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+        except curses.error:
+            pass
+        
+        # Draw snapshots
+        max_display = height - 8  # Leave space for header/footer
+        
+        # Root snapshots (column 0)
+        for i, snapshot in enumerate(root_snapshots[:max_display]):
+            if start_y + i >= height - 4:
+                break
+                
+            y = start_y + i
+            display_name = self.snapshot_manager.format_snapshot_name(snapshot)
+            
+            try:
+                if self.selected_col == 0 and i == self.selected_row:
+                    stdscr.attron(curses.color_pair(1))
+                    stdscr.addstr(y, col1_x, display_name[:col_width-2])
+                    stdscr.attroff(curses.color_pair(1))
+                else:
+                    stdscr.addstr(y, col1_x, display_name[:col_width-2])
+            except curses.error:
+                pass
+        
+        # Home snapshots (column 1)
+        for i, snapshot in enumerate(home_snapshots[:max_display]):
+            if start_y + i >= height - 4:
+                break
+                
+            y = start_y + i
+            display_name = self.snapshot_manager.format_snapshot_name(snapshot)
+            
+            try:
+                if self.selected_col == 1 and i == self.selected_row:
+                    stdscr.attron(curses.color_pair(1))
+                    stdscr.addstr(y, col2_x, display_name[:col_width-2])
+                    stdscr.attroff(curses.color_pair(1))
+                else:
+                    stdscr.addstr(y, col2_x, display_name[:col_width-2])
+            except curses.error:
+                pass
+        
+        # Games snapshots (column 2)
+        for i, snapshot in enumerate(games_snapshots[:max_display]):
+            if start_y + i >= height - 4:
+                break
+                
+            y = start_y + i
+            display_name = self.snapshot_manager.format_snapshot_name(snapshot)
+            
+            try:
+                if self.selected_col == 2 and i == self.selected_row:
+                    stdscr.attron(curses.color_pair(1))
+                    stdscr.addstr(y, col3_x, display_name[:col_width-2])
+                    stdscr.attroff(curses.color_pair(1))
+                else:
+                    stdscr.addstr(y, col3_x, display_name[:col_width-2])
+            except curses.error:
+                pass
+        
+        # Show current configuration
+        config_info = f"Pool: {self.config.get('btr_pool_dir')} | Snapshots: {self.config.get('snapshots_dir')}"
+        try:
+            stdscr.attron(curses.A_DIM)
+            stdscr.addstr(2, 2, config_info[:width-4])
+            stdscr.attroff(curses.A_DIM)
+        except curses.error:
+            pass
+    
+    def draw_settings_screen(self, stdscr):
+        """Draw settings configuration screen."""
+        height, width = stdscr.getmaxyx()
+        
+        settings = [
+            ("BTR Pool Directory", "btr_pool_dir"),
+            ("Snapshots Directory", "snapshots_dir"),
+            ("Auto Cleanup .BROKEN", "auto_cleanup"),
+            ("Confirm Actions", "confirm_actions"),
+            ("Show Timestamps", "show_timestamps")
+        ]
+        
+        start_y = 4
+        
+        try:
+            stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+            stdscr.addstr(start_y - 1, 4, "SETTINGS")
+            stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+        except curses.error:
+            pass
+        
+        for i, (label, key) in enumerate(settings):
+            if start_y + i * 2 >= height - 8:  # Don't write too close to bottom
+                break
+                
+            y = start_y + i * 2
+            value = self.config.get(key)
+            
+            try:
+                if i == self.selected_row:
+                    stdscr.attron(curses.color_pair(1))
+                
+                stdscr.addstr(y, 4, f"{label}:"[:width-6])
+                
+                if isinstance(value, bool):
+                    value_str = "Yes" if value else "No"
+                else:
+                    value_str = str(value)
+                
+                stdscr.addstr(y + 1, 6, value_str[:width-8])
+                
+                if i == self.selected_row:
+                    stdscr.attroff(curses.color_pair(1))
+            except curses.error:
+                pass
+        
+        # Show config file path and status
+        try:
+            stdscr.attron(curses.A_DIM)
+            config_path = f"Config: {CONFIG_FILE}"
+            config_exists = "EXISTS" if CONFIG_FILE.exists() else "NOT FOUND"
+            stdscr.addstr(height - 7, 4, f"{config_path} ({config_exists})"[:width-6])
+            stdscr.addstr(height - 6, 4, "ENTER: Edit | SPACE: Toggle | ESC: Back | S: Save"[:width-6])
+            stdscr.attroff(curses.A_DIM)
+        except curses.error:
+            pass
+    
+    def edit_setting(self, stdscr, key: str):
+        """Edit a configuration setting."""
+        current_value = self.config.get(key)
+        
+        if isinstance(current_value, bool):
+            # Toggle boolean values
+            self.config.set(key, not current_value)
+            self.config.save()  # Auto-save after change
+            self.set_status(f"Toggled {key}")
+            return
+        
+        # Edit string values
+        height, width = stdscr.getmaxyx()
+        
+        # Create edit window
+        dialog_width = min(60, width - 8)
+        dialog_height = 5
+        
+        try:
+            edit_win = curses.newwin(dialog_height, dialog_width, height // 2 - 2, (width - dialog_width) // 2)
+            edit_win.box()
+            edit_win.addstr(0, 2, f" Edit {key} "[:dialog_width-4])
+            
+            # Show current value
+            current_str = str(current_value)[:dialog_width-4]
+            edit_win.addstr(2, 2, f"Current: {current_str}")
+            edit_win.addstr(3, 2, "New: ")
+            edit_win.refresh()
+            
+            # Simple text input
+            curses.curs_set(1)
+            curses.echo()
+            
+            try:
+                new_value = edit_win.getstr(3, 7, dialog_width - 10).decode('utf-8')
+                if new_value.strip():
+                    self.config.set(key, new_value.strip())
+                    self.config.save()  # Auto-save after change
+                    self.set_status(f"Updated {key}")
+                else:
+                    self.set_status("No changes made")
+            except:
+                self.set_status("Edit cancelled")
+            
+            curses.noecho()
+            curses.curs_set(0)
+            
+        except curses.error:
+            self.set_status("Cannot create edit dialog")
+    
+    def confirm_dialog(self, stdscr, message: str) -> bool:
+        """Show confirmation dialog."""
+        if not self.config.get("confirm_actions", True):
+            return True
+        
+        height, width = stdscr.getmaxyx()
+        
+        # Create dialog window
+        dialog_width = min(len(message) + 10, width - 4)
+        dialog_height = 5
+        
+        try:
+            dialog_win = curses.newwin(dialog_height, dialog_width, 
+                                     height // 2 - 2, (width - dialog_width) // 2)
+            
+            dialog_win.box()
+            dialog_win.addstr(1, 2, message[:dialog_width - 4])
+            dialog_win.addstr(3, 2, "Y: Yes | N: No")
+            dialog_win.refresh()
+            
+            while True:
+                key = dialog_win.getch()
+                if key in [ord('y'), ord('Y')]:
+                    return True
+                elif key in [ord('n'), ord('N'), 27]:  # 27 = ESC
+                    return False
+        except curses.error:
+            # If dialog fails, default to confirmation
+            return True
+    
+    def handle_main_input(self, stdscr, key):
+        """Handle input for main screen."""
+        root_snapshots, home_snapshots, games_snapshots = self.snapshot_manager.get_snapshots()
+        
+        if key == curses.KEY_UP and self.selected_row > 0:
+            self.selected_row -= 1
+        elif key == curses.KEY_DOWN:
+            if self.selected_col == 0:
+                max_rows = len(root_snapshots)
+            elif self.selected_col == 1:
+                max_rows = len(home_snapshots)
+            else:  # self.selected_col == 2
+                max_rows = len(games_snapshots)
+            
+            if self.selected_row < max_rows - 1:
+                self.selected_row += 1
+        elif key == curses.KEY_LEFT:
+            if self.selected_col > 0:
+                self.selected_col -= 1
+                # Adjust row if new column has fewer items
+                if self.selected_col == 0:
+                    self.selected_row = min(self.selected_row, len(root_snapshots) - 1) if root_snapshots else 0
+                elif self.selected_col == 1:
+                    self.selected_row = min(self.selected_row, len(home_snapshots) - 1) if home_snapshots else 0
+        elif key == curses.KEY_RIGHT:
+            if self.selected_col < 2:
+                self.selected_col += 1
+                # Adjust row if new column has fewer items
+                if self.selected_col == 1:
+                    self.selected_row = min(self.selected_row, len(home_snapshots) - 1) if home_snapshots else 0
+                elif self.selected_col == 2:
+                    self.selected_row = min(self.selected_row, len(games_snapshots) - 1) if games_snapshots else 0
+        elif key in [curses.KEY_ENTER, 10, 13]:
+            self.handle_snapshot_selection(stdscr, root_snapshots, home_snapshots, games_snapshots)
+        elif key in [ord('s'), ord('S')]:
+            self.current_screen = "settings"
+            self.selected_row = 0
+        elif key in [ord('r'), ord('R')]:
+            self.set_status("Refreshed snapshot list")
+    
+    def handle_snapshot_selection(self, stdscr, root_snapshots, home_snapshots, games_snapshots):
+        """Handle snapshot selection and restoration."""
+        if self.selected_col == 0 and root_snapshots and self.selected_row < len(root_snapshots):
+            snapshot = root_snapshots[self.selected_row]
+            snapshot_type = "root"
+        elif self.selected_col == 1 and home_snapshots and self.selected_row < len(home_snapshots):
+            snapshot = home_snapshots[self.selected_row]
+            snapshot_type = "home"
+        elif self.selected_col == 2 and games_snapshots and self.selected_row < len(games_snapshots):
+            snapshot = games_snapshots[self.selected_row]
+            snapshot_type = "games"
+        else:
+            return
+        
+        # Confirm restoration
+        if not self.confirm_dialog(stdscr, f"Restore {snapshot_type} snapshot?"):
+            self.set_status("Restoration cancelled")
+            return
+        
+        # Perform restoration
+        self.set_status("Restoring snapshot...", 100)
+        stdscr.refresh()
+        
+        if self.snapshot_manager.restore_snapshot(snapshot, snapshot_type):
+            self.set_status("Snapshot restored successfully!", 100)
+            
+            # Ask for reboot
+            if self.confirm_dialog(stdscr, "Reboot system now?"):
+                subprocess.run(["reboot"])
+        else:
+            self.set_status("Failed to restore snapshot!", 100)
+    
+    def handle_settings_input(self, stdscr, key):
+        """Handle input for settings screen."""
+        settings_count = 5  # Number of settings
+        
+        if key == curses.KEY_UP and self.selected_row > 0:
+            self.selected_row -= 1
+        elif key == curses.KEY_DOWN and self.selected_row < settings_count - 1:
+            self.selected_row += 1
+        elif key in [curses.KEY_ENTER, 10, 13]:
+            settings_keys = ["btr_pool_dir", "snapshots_dir", "auto_cleanup", 
+                           "confirm_actions", "show_timestamps"]
+            self.edit_setting(stdscr, settings_keys[self.selected_row])
+        elif key == ord(' '):  # Space to toggle boolean values
+            settings_keys = ["btr_pool_dir", "snapshots_dir", "auto_cleanup", 
+                           "confirm_actions", "show_timestamps"]
+            key_name = settings_keys[self.selected_row]
+            if isinstance(self.config.get(key_name), bool):
+                self.config.set(key_name, not self.config.get(key_name))
+                self.config.save()  # Auto-save after toggle
+                self.set_status(f"Toggled {key_name}")
+        elif key in [ord('s'), ord('S')]:
+            # Manual save (though auto-save is already active)
+            self.config.save()
+            self.set_status("Settings saved manually!")
+        elif key == 27:  # ESC
+            self.current_screen = "main"
+            self.selected_row = 0
+    
+    def run(self, stdscr):
+        """Main application loop."""
+        curses.curs_set(0)
+        stdscr.timeout(100)  # Non-blocking input with timeout
+        
+        self.init_colors()
+        
+        while True:
+            stdscr.clear()
+            
+            # Draw UI components
+            self.draw_header(stdscr)
+            
+            if self.current_screen == "main":
+                self.draw_main_screen(stdscr)
+            elif self.current_screen == "settings":
+                self.draw_settings_screen(stdscr)
+            
+            self.draw_status(stdscr)
+            self.draw_footer(stdscr)
+            
+            stdscr.refresh()
+            
+            # Handle input
+            key = stdscr.getch()
+            
+            if key == -1:  # Timeout, continue loop
+                continue
+            elif key in [ord('q'), ord('Q')]:
+                break
+            elif self.current_screen == "main":
+                self.handle_main_input(stdscr, key)
+            elif self.current_screen == "settings":
+                self.handle_settings_input(stdscr, key)
+
+def main():
+    """Main entry point."""
+    if os.geteuid() != 0:
+        print("Error: This tool requires root privileges.")
+        print("Please run with sudo.")
+        sys.exit(1)
+    
+    try:
+        app = TUIApp()
+        curses.wrapper(app.run)
+    except KeyboardInterrupt:
+        print("\nOperation cancelled by user.")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

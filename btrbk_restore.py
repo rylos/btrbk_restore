@@ -29,7 +29,7 @@ if 0 <= choice < len(folders):
     selected_folder = folders[choice]
     source_path = os.path.join(snapshots_dir, selected_folder)
     
-    if selected_folder.startswith("@."):
+    if selected_folder.startswith("@.") and not selected_folder.startswith("@home.") and not selected_folder.startswith("@games."):
         snapshot_type = "@"
         snapshot_name = f"{btr_pool_dir}/@"
         subprocess.run(["mv", "--verbose", f"{btr_pool_dir}/@", f"{btr_pool_dir}/@.BROKEN"])
@@ -37,6 +37,10 @@ if 0 <= choice < len(folders):
         snapshot_type = "@home"
         snapshot_name = f"{btr_pool_dir}/@home"
         subprocess.run(["mv", "--verbose", f"{btr_pool_dir}/@home", f"{btr_pool_dir}/@home.BROKEN"])
+    elif selected_folder.startswith("@games."):
+        snapshot_type = "@games"
+        snapshot_name = f"{btr_pool_dir}/@games"
+        subprocess.run(["mv", "--verbose", f"{btr_pool_dir}/@games", f"{btr_pool_dir}/@games.BROKEN"])
     else:
         print("Snapshot non valido")
         exit()
