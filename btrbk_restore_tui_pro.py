@@ -201,12 +201,12 @@ class TUIApp:
         if self.reboot_needed:
             keys = [
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-                "S: Settings", "R: Refresh", "H: REBOOT", "Q: Quit"
+                "S: Settings", "R: Refresh", "P: Purge", "H: REBOOT", "Q: Quit"
             ]
         else:
             keys = [
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-                "S: Settings", "R: Refresh", "Q: Quit"
+                "S: Settings", "R: Refresh", "P: Purge", "Q: Quit"
             ]
         footer_text = " | ".join(keys)
         
@@ -247,6 +247,61 @@ class TUIApp:
         """Set status message with timeout."""
         self.status_message = message
         self.status_timeout = timeout
+    
+    def purge_old_snapshots(self):
+        """Purge old snapshots, keeping only the most recent one for each type."""
+        snapshots_dir = self.config.get("snapshots_dir")
+        
+        try:
+            # Get all snapshot directories
+            all_snapshots = []
+            for item in os.listdir(snapshots_dir):
+                item_path = os.path.join(snapshots_dir, item)
+                if os.path.isdir(item_path) and (
+                    item.startswith("@.") or 
+                    item.startswith("@home.") or 
+                    item.startswith("@games.")
+                ):
+                    all_snapshots.append(item_path)
+            
+            if not all_snapshots:
+                return 0, []
+            
+            # Sort snapshots
+            all_snapshots.sort()
+            
+            # Group by type and find old snapshots to delete
+            to_delete = []
+            
+            def process_type(prefix):
+                type_snapshots = [s for s in all_snapshots if os.path.basename(s).startswith(prefix + ".")]
+                if len(type_snapshots) > 1:
+                    # Keep the last (most recent) one, delete the rest
+                    to_delete.extend(type_snapshots[:-1])
+            
+            process_type("@")
+            process_type("@home")
+            process_type("@games")
+            
+            if not to_delete:
+                return 0, []
+            
+            # Delete old snapshots
+            deleted_count = 0
+            for snapshot_path in to_delete:
+                try:
+                    result = subprocess.run(
+                        ["btrfs", "subvolume", "delete", snapshot_path],
+                        capture_output=True, text=True, check=True
+                    )
+                    deleted_count += 1
+                except subprocess.CalledProcessError:
+                    pass  # Continue with other snapshots even if one fails
+            
+            return deleted_count, [os.path.basename(s) for s in to_delete]
+            
+        except Exception:
+            return -1, []  # Error occurred
     
     def draw_main_screen(self, stdscr):
         """Draw main snapshot selection screen."""
@@ -533,6 +588,22 @@ class TUIApp:
                     self.set_status("Reboot cancelled")
             else:
                 self.set_status("No reboot needed")
+        elif key in [ord('p'), ord('P')]:
+            # Purge old snapshots
+            if self.confirm_dialog(stdscr, "Purge old snapshots (keep only most recent)?"):
+                self.set_status("Purging old snapshots...", 100)
+                stdscr.refresh()
+                
+                deleted_count, deleted_list = self.purge_old_snapshots()
+                
+                if deleted_count == -1:
+                    self.set_status("Error during purge operation!", 100)
+                elif deleted_count == 0:
+                    self.set_status("No old snapshots to purge", 100)
+                else:
+                    self.set_status(f"Purged {deleted_count} old snapshots successfully", 150)
+            else:
+                self.set_status("Purge cancelled")
     
     def handle_snapshot_selection(self, stdscr, root_snapshots, home_snapshots, games_snapshots):
         """Handle snapshot selection and restoration."""

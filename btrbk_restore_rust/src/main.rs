@@ -163,6 +163,81 @@ impl App {
         self.status_timeout = timeout;
     }
     
+    fn purge_old_snapshots(&self) -> (i32, Vec<String>) {
+        let snapshots_dir = &self.config.snapshots_dir;
+        
+        match fs::read_dir(snapshots_dir) {
+            Ok(entries) => {
+                let mut all_snapshots: Vec<String> = entries
+                    .filter_map(|entry| {
+                        let entry = entry.ok()?;
+                        if entry.path().is_dir() {
+                            let name = entry.file_name().to_string_lossy().into_owned();
+                            if name.starts_with("@.") || name.starts_with("@home.") || name.starts_with("@games.") {
+                                Some(entry.path().to_string_lossy().into_owned())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                
+                if all_snapshots.is_empty() {
+                    return (0, Vec::new());
+                }
+                
+                // Sort snapshots
+                all_snapshots.sort();
+                
+                // Group by type and find old snapshots to delete
+                let mut to_delete = Vec::new();
+                
+                let process_type = |prefix: &str, snapshots: &[String], to_delete: &mut Vec<String>| {
+                    let type_snapshots: Vec<&String> = snapshots
+                        .iter()
+                        .filter(|s| {
+                            let basename = s.split('/').last().unwrap_or("");
+                            basename.starts_with(&format!("{}.", prefix))
+                        })
+                        .collect();
+                    
+                    if type_snapshots.len() > 1 {
+                        // Keep the last (most recent) one, delete the rest
+                        for snapshot in &type_snapshots[..type_snapshots.len() - 1] {
+                            to_delete.push((*snapshot).clone());
+                        }
+                    }
+                };
+                
+                process_type("@", &all_snapshots, &mut to_delete);
+                process_type("@home", &all_snapshots, &mut to_delete);
+                process_type("@games", &all_snapshots, &mut to_delete);
+                
+                if to_delete.is_empty() {
+                    return (0, Vec::new());
+                }
+                
+                // Delete old snapshots
+                let mut deleted_count = 0;
+                let deleted_names: Vec<String> = to_delete
+                    .iter()
+                    .map(|path| path.split('/').last().unwrap_or("").to_string())
+                    .collect();
+                
+                for snapshot_path in &to_delete {
+                    if run_command(&["btrfs", "subvolume", "delete", snapshot_path]) {
+                        deleted_count += 1;
+                    }
+                }
+                
+                (deleted_count, deleted_names)
+            }
+            Err(_) => (-1, Vec::new()), // Error occurred
+        }
+    }
+    
     fn draw_header(&self) {
         let (_, width) = get_max_yx();
         
@@ -182,12 +257,12 @@ impl App {
         let keys = if self.reboot_needed {
             vec![
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-                "S: Settings", "R: Refresh", "H: REBOOT", "Q: Quit"
+                "S: Settings", "R: Refresh", "P: Purge", "H: REBOOT", "Q: Quit"
             ]
         } else {
             vec![
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-                "S: Settings", "R: Refresh", "Q: Quit"
+                "S: Settings", "R: Refresh", "P: Purge", "Q: Quit"
             ]
         };
         let footer_text = keys.join(" | ");
@@ -521,6 +596,25 @@ impl App {
                     }
                 } else {
                     self.set_status("No reboot needed", 50);
+                }
+            }
+            112 | 80 => {  // 'p' or 'P'
+                // Purge old snapshots
+                if self.confirm_dialog("Purge old snapshots (keep only most recent)?") {
+                    self.set_status("Purging old snapshots...", 100);
+                    refresh();
+                    
+                    let (deleted_count, _deleted_list) = self.purge_old_snapshots();
+                    
+                    if deleted_count == -1 {
+                        self.set_status("Error during purge operation!", 100);
+                    } else if deleted_count == 0 {
+                        self.set_status("No old snapshots to purge", 100);
+                    } else {
+                        self.set_status(&format!("Purged {} old snapshots successfully", deleted_count), 150);
+                    }
+                } else {
+                    self.set_status("Purge cancelled", 50);
                 }
             }
             _ => {}

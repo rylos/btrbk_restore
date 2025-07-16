@@ -112,6 +112,7 @@ Il tool gestisce snapshot con questa nomenclatura:
 - **ENTER**: Selezione e ripristino snapshot
 - **S**: Accesso schermata settaggi
 - **R**: Refresh lista snapshot
+- **P**: Purge snapshot vecchi (mantiene solo il più recente per tipo)
 - **H**: Riavvio sistema (quando necessario)
 - **Q**: Uscita dall'applicazione
 
@@ -122,11 +123,20 @@ Il tool gestisce snapshot con questa nomenclatura:
 - **S**: Salvataggio manuale (opzionale, auto-salvataggio attivo)
 - **ESC**: Ritorno alla schermata principale
 
-### Funzionalità Reboot Intelligente:
+### Funzionalità Avanzate:
+
+#### Purge Intelligente (Tasto P):
+- **Analizza** tutti gli snapshot per tipo (@, @home, @games)
+- **Mantiene** solo lo snapshot più recente per ogni tipo
+- **Elimina** tutti gli snapshot più vecchi automaticamente
+- **Conferma** prima dell'operazione per sicurezza
+- **Feedback** dettagliato su quanti snapshot sono stati eliminati
+
+#### Reboot Intelligente:
 - **Tasto R**: Sempre disponibile per refresh lista snapshot
 - **Tasto H**: Appare nel footer dopo un restore per riavvio rapido
 - **Warning persistente**: Barra di stato mostra "⚠ REBOOT REQUIRED" dopo ogni restore
-- **Tasti dedicati**: R per refresh, H per reboot - nessuna confusione
+- **Tasti dedicati**: R per refresh, H per reboot, P per purge - nessuna confusione
 
 ## File Desktop
 
