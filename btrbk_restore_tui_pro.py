@@ -74,20 +74,32 @@ class SnapshotManager:
     def __init__(self, config: Config):
         self.config = config
     
-    def get_snapshots(self) -> Tuple[List[str], List[str], List[str]]:
-        """Get available snapshots sorted by date (newest first)."""
+    def get_snapshots(self) -> Tuple[Dict[str, List[str]], List[str]]:
+        """Get available snapshots organized by type (dynamically detected)."""
         snapshots_dir = self.config.get("snapshots_dir")
         try:
             folders = [f for f in os.listdir(snapshots_dir) 
                       if os.path.isdir(os.path.join(snapshots_dir, f))]
             
-            root_snapshots = sorted([f for f in folders if f.startswith("@.") and not f.startswith("@home.") and not f.startswith("@games.")], reverse=True)
-            home_snapshots = sorted([f for f in folders if f.startswith("@home.")], reverse=True)
-            games_snapshots = sorted([f for f in folders if f.startswith("@games.")], reverse=True)
+            # Group snapshots by prefix
+            snapshot_groups = {}
+            for folder in folders:
+                if '.' in folder and folder.startswith('@'):
+                    prefix = folder.split('.')[0]
+                    if prefix not in snapshot_groups:
+                        snapshot_groups[prefix] = []
+                    snapshot_groups[prefix].append(folder)
             
-            return root_snapshots, home_snapshots, games_snapshots
+            # Sort each group by timestamp (newest first)
+            for prefix in snapshot_groups:
+                snapshot_groups[prefix].sort(reverse=True)
+            
+            # Sort prefixes for consistent ordering (@ first, then alphabetically)
+            sorted_prefixes = sorted(snapshot_groups.keys(), key=lambda x: (x != '@', x))
+            
+            return snapshot_groups, sorted_prefixes
         except Exception:
-            return [], [], []
+            return {}, []
     
     def format_snapshot_name(self, snapshot: str) -> str:
         """Format snapshot name for display."""
@@ -96,18 +108,18 @@ class SnapshotManager:
         
         # Extract timestamp from snapshot name
         try:
-            if snapshot.startswith("@."):
-                timestamp_str = snapshot[2:]
-            elif snapshot.startswith("@home."):
-                timestamp_str = snapshot[6:]
-            elif snapshot.startswith("@games."):
-                timestamp_str = snapshot[7:]
+            if '.' in snapshot and snapshot.startswith('@'):
+                # Find the prefix and extract timestamp
+                prefix = snapshot.split('.')[0]
+                timestamp_str = snapshot[len(prefix) + 1:]  # +1 for the dot
+                
+                # Parse timestamp (format: YYYYMMDD_HHMMSS)
+                dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                return f"{snapshot} ({dt.strftime('%Y-%m-%d %H:%M:%S')})"
             else:
                 return snapshot
-            
-            # Parse timestamp (format: YYYYMMDD_HHMMSS)
-            dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
-            return f"{snapshot} ({dt.strftime('%Y-%m-%d %H:%M:%S')})"
+        except (ValueError, IndexError):
+            return snapshot
         except ValueError:
             return snapshot
     
@@ -190,9 +202,9 @@ class TUIApp:
         except curses.error:
             pass
         
-        # Separator
+        # Separator - no color, full width
         try:
-            stdscr.addstr(1, 0, "-" * (width-1))
+            stdscr.addstr(1, 0, "-" * width)
         except curses.error:
             pass
     
@@ -214,8 +226,10 @@ class TUIApp:
         footer_text = " | ".join(keys)
         
         try:
+            # Separator - no color, full width
+            stdscr.addstr(height - 2, 0, "-" * width)
+            # Footer text with color
             stdscr.attron(curses.color_pair(5))
-            stdscr.addstr(height - 2, 0, "-" * (width-1))
             stdscr.addstr(height - 1, 0, footer_text[:width-1].ljust(width-1))
             stdscr.attroff(curses.color_pair(5))
         except curses.error:
@@ -420,12 +434,12 @@ class TUIApp:
             return -1, []  # Error occurred
     
     def draw_main_screen(self, stdscr):
-        """Draw main snapshot selection screen."""
+        """Draw main snapshot selection screen with dynamic columns."""
         height, width = stdscr.getmaxyx()
         
-        root_snapshots, home_snapshots, games_snapshots = self.snapshot_manager.get_snapshots()
+        snapshot_groups, sorted_prefixes = self.snapshot_manager.get_snapshots()
         
-        if not root_snapshots and not home_snapshots and not games_snapshots:
+        if not snapshot_groups:
             try:
                 stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
                 stdscr.addstr(height // 2, (width - 20) // 2, "No snapshots found!")
@@ -434,80 +448,54 @@ class TUIApp:
                 pass
             return
         
-        # Calculate column positions for three columns
-        col1_x = 2
-        col_width = (width - 8) // 3  # Divide available width by 3 columns
-        col2_x = col1_x + col_width
-        col3_x = col2_x + col_width
+        # Ensure selected_col is within bounds
+        if self.selected_col >= len(sorted_prefixes):
+            self.selected_col = len(sorted_prefixes) - 1
         
+        # Calculate column positions dynamically
+        num_cols = len(sorted_prefixes)
+        col_width = (width - 4) // num_cols if num_cols > 0 else width - 4
         start_y = 4
         
         # Draw column headers
         try:
             stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-            stdscr.addstr(start_y - 1, col1_x, f"ROOT ({len(root_snapshots)})")
-            stdscr.addstr(start_y - 1, col2_x, f"HOME ({len(home_snapshots)})")
-            stdscr.addstr(start_y - 1, col3_x, f"GAMES ({len(games_snapshots)})")
+            for i, prefix in enumerate(sorted_prefixes):
+                col_x = 2 + i * col_width
+                snapshots_count = len(snapshot_groups.get(prefix, []))
+                header = f"{prefix.upper()} ({snapshots_count})"
+                stdscr.addstr(start_y - 1, col_x, header[:col_width-2])
             stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
         except curses.error:
             pass
         
-        # Draw snapshots
+        # Draw snapshots for each column
         max_display = height - 8  # Leave space for header/footer
         
-        # Root snapshots (column 0)
-        for i, snapshot in enumerate(root_snapshots[:max_display]):
-            if start_y + i >= height - 4:
-                break
-                
-            y = start_y + i
-            display_name = self.snapshot_manager.format_snapshot_name(snapshot)
+        for col_idx, prefix in enumerate(sorted_prefixes):
+            snapshots = snapshot_groups.get(prefix, [])
+            col_x = 2 + col_idx * col_width
             
-            try:
-                if self.selected_col == 0 and i == self.selected_row:
-                    stdscr.attron(curses.color_pair(1))
-                    stdscr.addstr(y, col1_x, display_name[:col_width-2])
-                    stdscr.attroff(curses.color_pair(1))
-                else:
-                    stdscr.addstr(y, col1_x, display_name[:col_width-2])
-            except curses.error:
-                pass
-        
-        # Home snapshots (column 1)
-        for i, snapshot in enumerate(home_snapshots[:max_display]):
-            if start_y + i >= height - 4:
-                break
-                
-            y = start_y + i
-            display_name = self.snapshot_manager.format_snapshot_name(snapshot)
+            # Ensure selected_row is within bounds for current column
+            if col_idx == self.selected_col and self.selected_row >= len(snapshots):
+                self.selected_row = max(0, len(snapshots) - 1)
             
-            try:
-                if self.selected_col == 1 and i == self.selected_row:
-                    stdscr.attron(curses.color_pair(1))
-                    stdscr.addstr(y, col2_x, display_name[:col_width-2])
-                    stdscr.attroff(curses.color_pair(1))
-                else:
-                    stdscr.addstr(y, col2_x, display_name[:col_width-2])
-            except curses.error:
-                pass
-        
-        # Games snapshots (column 2)
-        for i, snapshot in enumerate(games_snapshots[:max_display]):
-            if start_y + i >= height - 4:
-                break
+            for i, snapshot in enumerate(snapshots[:max_display]):
+                if start_y + i >= height - 4:
+                    break
+                    
+                y = start_y + i
+                display_name = self.snapshot_manager.format_snapshot_name(snapshot)
                 
-            y = start_y + i
-            display_name = self.snapshot_manager.format_snapshot_name(snapshot)
-            
-            try:
-                if self.selected_col == 2 and i == self.selected_row:
-                    stdscr.attron(curses.color_pair(1))
-                    stdscr.addstr(y, col3_x, display_name[:col_width-2])
-                    stdscr.attroff(curses.color_pair(1))
-                else:
-                    stdscr.addstr(y, col3_x, display_name[:col_width-2])
-            except curses.error:
-                pass
+                try:
+                    if self.selected_col == col_idx and i == self.selected_row:
+                        stdscr.attron(curses.color_pair(1))
+                        stdscr.addstr(y, col_x, display_name[:col_width-2])
+                        stdscr.attroff(curses.color_pair(1))
+                    else:
+                        stdscr.addstr(y, col_x, display_name[:col_width-2])
+                except curses.error:
+                    pass
         
         # Show current configuration
         config_info = f"Pool: {self.config.get('btr_pool_dir')} | Snapshots: {self.config.get('snapshots_dir')}"
@@ -656,39 +644,37 @@ class TUIApp:
             return True
     
     def handle_main_input(self, stdscr, key):
-        """Handle input for main screen."""
-        root_snapshots, home_snapshots, games_snapshots = self.snapshot_manager.get_snapshots()
+        """Handle input for main screen with dynamic columns."""
+        snapshot_groups, sorted_prefixes = self.snapshot_manager.get_snapshots()
+        
+        if not sorted_prefixes:
+            return
+        
+        # Ensure selected_col is within bounds
+        if self.selected_col >= len(sorted_prefixes):
+            self.selected_col = len(sorted_prefixes) - 1
+        
+        current_snapshots = snapshot_groups.get(sorted_prefixes[self.selected_col], [])
         
         if key == curses.KEY_UP and self.selected_row > 0:
             self.selected_row -= 1
         elif key == curses.KEY_DOWN:
-            if self.selected_col == 0:
-                max_rows = len(root_snapshots)
-            elif self.selected_col == 1:
-                max_rows = len(home_snapshots)
-            else:  # self.selected_col == 2
-                max_rows = len(games_snapshots)
-            
-            if self.selected_row < max_rows - 1:
+            if self.selected_row < len(current_snapshots) - 1:
                 self.selected_row += 1
         elif key == curses.KEY_LEFT:
             if self.selected_col > 0:
                 self.selected_col -= 1
                 # Adjust row if new column has fewer items
-                if self.selected_col == 0:
-                    self.selected_row = min(self.selected_row, len(root_snapshots) - 1) if root_snapshots else 0
-                elif self.selected_col == 1:
-                    self.selected_row = min(self.selected_row, len(home_snapshots) - 1) if home_snapshots else 0
+                new_snapshots = snapshot_groups.get(sorted_prefixes[self.selected_col], [])
+                self.selected_row = min(self.selected_row, len(new_snapshots) - 1) if new_snapshots else 0
         elif key == curses.KEY_RIGHT:
-            if self.selected_col < 2:
+            if self.selected_col < len(sorted_prefixes) - 1:
                 self.selected_col += 1
                 # Adjust row if new column has fewer items
-                if self.selected_col == 1:
-                    self.selected_row = min(self.selected_row, len(home_snapshots) - 1) if home_snapshots else 0
-                elif self.selected_col == 2:
-                    self.selected_row = min(self.selected_row, len(games_snapshots) - 1) if games_snapshots else 0
+                new_snapshots = snapshot_groups.get(sorted_prefixes[self.selected_col], [])
+                self.selected_row = min(self.selected_row, len(new_snapshots) - 1) if new_snapshots else 0
         elif key in [curses.KEY_ENTER, 10, 13]:
-            self.handle_snapshot_selection(stdscr, root_snapshots, home_snapshots, games_snapshots)
+            self.handle_snapshot_selection(stdscr, snapshot_groups, sorted_prefixes)
         elif key in [ord('s'), ord('S')]:
             self.current_screen = "settings"
             self.selected_row = 0
@@ -731,19 +717,19 @@ class TUIApp:
             else:
                 self.set_status("Snapshot creation cancelled")
     
-    def handle_snapshot_selection(self, stdscr, root_snapshots, home_snapshots, games_snapshots):
-        """Handle snapshot selection and restoration."""
-        if self.selected_col == 0 and root_snapshots and self.selected_row < len(root_snapshots):
-            snapshot = root_snapshots[self.selected_row]
-            snapshot_type = "root"
-        elif self.selected_col == 1 and home_snapshots and self.selected_row < len(home_snapshots):
-            snapshot = home_snapshots[self.selected_row]
-            snapshot_type = "home"
-        elif self.selected_col == 2 and games_snapshots and self.selected_row < len(games_snapshots):
-            snapshot = games_snapshots[self.selected_row]
-            snapshot_type = "games"
-        else:
+    def handle_snapshot_selection(self, stdscr, snapshot_groups, sorted_prefixes):
+        """Handle snapshot selection and restoration with dynamic columns."""
+        if not sorted_prefixes or self.selected_col >= len(sorted_prefixes):
             return
+        
+        current_prefix = sorted_prefixes[self.selected_col]
+        current_snapshots = snapshot_groups.get(current_prefix, [])
+        
+        if not current_snapshots or self.selected_row >= len(current_snapshots):
+            return
+        
+        snapshot = current_snapshots[self.selected_row]
+        snapshot_type = current_prefix[1:] if current_prefix.startswith('@') else current_prefix  # Remove @ prefix
         
         # Confirm restoration
         if not self.confirm_dialog(stdscr, f"Restore {snapshot_type} snapshot?"):

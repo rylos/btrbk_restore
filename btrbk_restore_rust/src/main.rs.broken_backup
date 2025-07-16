@@ -527,10 +527,9 @@ impl App {
         
         // Draw snapshots for each column
         let max_display = height - 8; // Leave space for header/footer
-        let empty_vec = Vec::new();
         
         for (col_idx, prefix) in sorted_prefixes.iter().enumerate() {
-            let snapshots = snapshot_groups.get(prefix).unwrap_or(&empty_vec);
+            let snapshots = snapshot_groups.get(prefix).unwrap_or(&Vec::new());
             let col_x = 2 + (col_idx as i32) * col_width;
             
             for (i, snapshot) in snapshots.iter().enumerate() {
@@ -698,8 +697,7 @@ impl App {
             self.selected_col = (sorted_prefixes.len() as i32) - 1;
         }
         
-        let empty_vec = Vec::new();
-        let current_snapshots = snapshot_groups.get(&sorted_prefixes[self.selected_col as usize]).unwrap_or(&empty_vec);
+        let current_snapshots = snapshot_groups.get(&sorted_prefixes[self.selected_col as usize]).unwrap_or(&Vec::new());
         
         match key {
             KEY_UP => {
@@ -716,8 +714,7 @@ impl App {
                 if self.selected_col > 0 {
                     self.selected_col -= 1;
                     // Adjust row if new column has fewer items
-                    let empty_vec = Vec::new();
-                    let new_snapshots = snapshot_groups.get(&sorted_prefixes[self.selected_col as usize]).unwrap_or(&empty_vec);
+                    let new_snapshots = snapshot_groups.get(&sorted_prefixes[self.selected_col as usize]).unwrap_or(&Vec::new());
                     if self.selected_row >= new_snapshots.len() as i32 && !new_snapshots.is_empty() {
                         self.selected_row = (new_snapshots.len() as i32) - 1;
                     } else if new_snapshots.is_empty() {
@@ -729,8 +726,7 @@ impl App {
                 if self.selected_col < (sorted_prefixes.len() as i32) - 1 {
                     self.selected_col += 1;
                     // Adjust row if new column has fewer items
-                    let empty_vec = Vec::new();
-                    let new_snapshots = snapshot_groups.get(&sorted_prefixes[self.selected_col as usize]).unwrap_or(&empty_vec);
+                    let new_snapshots = snapshot_groups.get(&sorted_prefixes[self.selected_col as usize]).unwrap_or(&Vec::new());
                     if self.selected_row >= new_snapshots.len() as i32 && !new_snapshots.is_empty() {
                         self.selected_row = (new_snapshots.len() as i32) - 1;
                     } else if new_snapshots.is_empty() {
@@ -796,6 +792,39 @@ impl App {
             _ => {}
         }
     }
+                if self.confirm_dialog("Purge old snapshots (keep only most recent)?") {
+                    self.set_status("Purging old snapshots...", 100);
+                    refresh();
+                    
+                    let (deleted_count, _deleted_list) = self.purge_old_snapshots();
+                    
+                    if deleted_count == -1 {
+                        self.set_status("Error during purge operation!", 100);
+                    } else if deleted_count == 0 {
+                        self.set_status("No old snapshots to purge", 100);
+                    } else {
+                        self.set_status(&format!("Purged {} old snapshots successfully", deleted_count), 150);
+                    }
+                } else {
+                    self.set_status("Purge cancelled", 50);
+                }
+            }
+            105 | 73 => {  // 'i' or 'I'
+                // Create new snapshots
+                if self.confirm_dialog("Create new snapshots with btrbk?") {
+                    let (success, message) = self.create_snapshot();
+                    if success {
+                        self.set_status("New snapshots created successfully!", 150);
+                    } else {
+                        self.set_status(&format!("Snapshot creation failed: {}", message), 150);
+                    }
+                } else {
+                    self.set_status("Snapshot creation cancelled", 50);
+                }
+            }
+            _ => {}
+        }
+    }
     
     fn handle_snapshot_selection(&mut self, snapshot_groups: &std::collections::HashMap<String, Vec<String>>, sorted_prefixes: &[String]) {
         if sorted_prefixes.is_empty() || self.selected_col >= sorted_prefixes.len() as i32 {
@@ -803,8 +832,7 @@ impl App {
         }
         
         let current_prefix = &sorted_prefixes[self.selected_col as usize];
-        let empty_vec = Vec::new();
-        let current_snapshots = snapshot_groups.get(current_prefix).unwrap_or(&empty_vec);
+        let current_snapshots = snapshot_groups.get(current_prefix).unwrap_or(&Vec::new());
         
         if current_snapshots.is_empty() || self.selected_row >= current_snapshots.len() as i32 {
             return;
@@ -862,6 +890,12 @@ impl App {
                 }
             }
             27 => {  // ESC
+                self.current_screen = "main".to_string();
+                self.selected_row = 0;
+            }
+            _ => {}
+        }
+    }
                 self.current_screen = "main".to_string();
                 self.selected_row = 0;
             }

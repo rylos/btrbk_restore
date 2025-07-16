@@ -4,8 +4,10 @@ Un set di strumenti per il ripristino di snapshot Btrfs creati con btrbk, dispon
 
 ## Descrizione
 
-Questo progetto fornisce strumenti per ripristinare facilmente snapshot di subvolumi Btrfs (@ per root, @home per home e @games per games) creati dal tool btrbk. Gli strumenti permettono di:
+Questo progetto fornisce strumenti per ripristinare facilmente snapshot di subvolumi Btrfs creati dal tool btrbk. Gli strumenti permettono di:
 
+- **Rilevamento automatico** di tutti i tipi di snapshot presenti
+- **Interfaccia dinamica** che si adatta al numero di gruppi trovati
 - Visualizzare gli snapshot disponibili per tutti i subvolumi
 - Selezionare e ripristinare snapshot specifici
 - Gestire automaticamente il backup dei subvolumi esistenti
@@ -14,11 +16,38 @@ Questo progetto fornisce strumenti per ripristinare facilmente snapshot di subvo
 - Riavvio sistema con indicatori visivi
 - Opzionalmente riavviare il sistema dopo il ripristino
 
+## ✨ Novità v2.1 - Gestione Dinamica dei Gruppi
+
+### 🔄 **Rilevamento Automatico:**
+- **Non più limitato** ai 3 tipi fissi (@, @home, @games)
+- **Scansiona automaticamente** la directory degli snapshot
+- **Rileva qualsiasi prefix** (@, @home, @games, @custom, @backup, @work, ecc.)
+- **Si adatta automaticamente** a qualsiasi configurazione btrbk dell'utente
+
+### 📊 **Interfaccia Adattiva:**
+- **Colonne dinamiche**: Il numero di colonne si adatta ai gruppi trovati
+- **Larghezza automatica**: Le colonne si ridimensionano automaticamente
+- **Ordinamento intelligente**: @ sempre primo, poi ordine alfabetico
+- **Conteggio snapshot**: Mostra il numero di snapshot per ogni gruppo
+
+### 🎯 **Esempi di Configurazioni Supportate:**
+```
+Utente Base:     @ | @home
+Utente Gaming:   @ | @home | @games  
+Utente Pro:      @ | @home | @games | @work | @backup
+Utente Server:   @ | @home | @var | @opt | @srv | @data
+```
+
+### 🎨 **Interfaccia Migliorata:**
+- **Linee separatrici** a larghezza completa dello schermo
+- **Consistenza visiva** perfetta tra header e footer
+- **Colori ottimizzati** per una migliore leggibilità
+
 ## Versioni Disponibili
 
 ### Python
 - **`btrbk_restore.py`** - Versione CLI semplice con menu testuale
-- **`btrbk_restore_tui_pro.py`** - Interfaccia TUI professionale con configurazione persistente e 3 colonne
+- **`btrbk_restore_tui_pro.py`** - Interfaccia TUI professionale con configurazione persistente e colonne dinamiche
 
 ### Rust
 - **`btrbk_restore_rust/`** - Versione TUI performante scritta in Rust con ncurses (identica alla versione Pro Python)
@@ -79,7 +108,7 @@ sudo ./target/release/btrbk_restore
 - Interfaccia semplice per uso occasionale
 
 ### Versione TUI Professionale (`btrbk_restore_tui_pro.py`)
-- **Interfaccia a 3 colonne**: ROOT | HOME | GAMES
+- **Interfaccia dinamica**: Colonne che si adattano automaticamente ai gruppi trovati
 - **Configurazione persistente**: Salvataggio automatico in `~/.config/btrbk_restore/config.json`
 - **Navigazione avanzata**: Frecce direzionali per navigazione fluida
 - **Schermata settaggi completa**: Tasto `S` per configurazione avanzata
@@ -87,6 +116,7 @@ sudo ./target/release/btrbk_restore
 - **Messaggi di stato**: Feedback in tempo reale delle operazioni
 - **Temi e colori**: Interfaccia professionale con evidenziazione
 - **Auto-salvataggio**: Ogni modifica viene salvata automaticamente
+- **Creazione snapshot**: Interfaccia dedicata per `btrbk run --progress`
 - **Purge intelligente**: Pulizia automatica snapshot vecchi
 - **Sistema reboot**: Indicatori visivi e shortcut dedicati
 
@@ -98,25 +128,33 @@ sudo ./target/release/btrbk_restore
 - **Gestione memoria efficiente**: Ideale per sistemi con risorse limitate
 - **Compatibilità totale**: Zero differenze funzionali con la versione Python Pro
 - **Compilazione ottimizzata**: Rust edition 2021, zero errori e warning
+- **Creazione snapshot**: Interfaccia multi-thread per output in tempo reale
 - **Purge e reboot**: Tutte le funzionalità avanzate implementate
 
 ## Struttura Snapshot Supportata
 
-Il tool gestisce snapshot con questa nomenclatura:
+Il tool gestisce automaticamente snapshot con questa nomenclatura:
 - `@.YYYYMMDD_HHMMSS` - Snapshot del subvolume root
 - `@home.YYYYMMDD_HHMMSS` - Snapshot del subvolume home
 - `@games.YYYYMMDD_HHMMSS` - Snapshot del subvolume games
+- `@custom.YYYYMMDD_HHMMSS` - Snapshot di subvolumi personalizzati
+- `@backup.YYYYMMDD_HHMMSS` - Snapshot di backup
+- `@work.YYYYMMDD_HHMMSS` - Snapshot di lavoro
+- **E qualsiasi altro prefix** che inizia con `@` seguito da un punto
+
+**Il tool si adatta automaticamente** a qualsiasi configurazione btrbk dell'utente!
 
 ## Controlli TUI
 
-### Versioni con 3 colonne (TUI Pro Python/Rust):
+### Versioni con Colonne Dinamiche (TUI Pro Python/Rust):
 
 #### Schermata Principale:
 - **↑↓**: Navigazione verticale negli snapshot
-- **←→**: Cambio colonna (ROOT ↔ HOME ↔ GAMES)
+- **←→**: Cambio colonna dinamico (adattivo al numero di gruppi)
 - **ENTER**: Selezione e ripristino snapshot
 - **S**: Accesso schermata settaggi
 - **R**: Refresh lista snapshot
+- **I**: Creazione nuovi snapshot (btrbk run --progress)
 - **P**: Purge snapshot vecchi (mantiene solo il più recente per tipo)
 - **H**: Riavvio sistema (quando necessario)
 - **Q**: Uscita dall'applicazione
@@ -129,6 +167,15 @@ Il tool gestisce snapshot con questa nomenclatura:
 - **ESC**: Ritorno alla schermata principale
 
 ### Funzionalità Avanzate:
+
+#### Creazione Snapshot Istantanea (Tasto I):
+- **Esegue**: `btrbk run --progress` con interfaccia dedicata
+- **Output in tempo reale**: Visualizzazione professionale dell'avanzamento
+- **Finestra dedicata**: Schermata fullscreen con bordi e titolo
+- **Cancellazione**: ESC per interrompere l'operazione in qualsiasi momento
+- **Auto-scroll**: Scorrimento automatico per output lunghi
+- **Feedback completo**: Messaggi di successo/errore colorati
+- **Gestione stderr**: Output perfettamente allineato senza sovrapposizioni
 
 #### Purge Intelligente (Tasto P):
 - **Analizza** tutti gli snapshot per tipo (@, @home, @games)
@@ -143,7 +190,7 @@ Il tool gestisce snapshot con questa nomenclatura:
 - **Tasto R**: Sempre disponibile per refresh lista snapshot
 - **Tasto H**: Appare nel footer dopo un restore per riavvio rapido
 - **Warning persistente**: Barra di stato mostra "⚠ REBOOT REQUIRED" dopo ogni restore
-- **Tasti dedicati**: R per refresh, H per reboot, P per purge - nessuna confusione
+- **Tasti dedicati**: R per refresh, H per reboot, I per snapshot, P per purge - nessuna confusione
 - **Indicatori visivi**: Footer dinamico che cambia in base al contesto
 
 ## File Desktop
@@ -165,7 +212,7 @@ Incluso `snapshot-restore.desktop` per l'integrazione nel desktop environment.
 - **Sistema operativo**: Linux con filesystem Btrfs
 - **Dipendenze**: btrfs-progs, btrbk
 - **Desktop**: Testato su KDE Plasma, compatibile con altri DE
-- **Subvolumi supportati**: @, @home, @games
+- **Subvolumi supportati**: Qualsiasi configurazione che inizia con @ (dinamico)
 - **Architetture**: x86_64, ARM64 (Rust), tutte le architetture supportate da Python
 
 ## Configurazione Avanzata
@@ -215,6 +262,7 @@ Entrambe le versioni TUI (Python Pro e Rust) condividono la configurazione salva
 - ✅ Quando Python è preferito per modifiche
 - ✅ Sviluppo e debugging
 - ✅ Gestione completa degli snapshot
+- ✅ Interfaccia dinamica che si adatta a qualsiasi configurazione
 
 ### **Rust (`btrbk_restore_rust/`)**
 - ✅ Massime performance e velocità
@@ -222,6 +270,7 @@ Entrambe le versioni TUI (Python Pro e Rust) condividono la configurazione salva
 - ✅ Ambienti di produzione
 - ✅ Quando serve efficienza di memoria
 - ✅ Tutte le funzionalità della versione Pro
+- ✅ Interfaccia dinamica identica alla versione Python
 
 ## Vantaggi dell'Allineamento Completo
 
@@ -282,11 +331,12 @@ btrbk_restore/
 1. **Avvio**: `sudo ./btrbk_restore_tui_pro.py` o versione Rust
 2. **Navigazione**: Usa frecce per esplorare snapshot disponibili
 3. **Configurazione**: Premi `S` per modificare settaggi se necessario
-4. **Selezione**: Scegli snapshot da ripristinare con `ENTER`
-5. **Conferma**: Conferma l'operazione di ripristino
-6. **Reboot**: Scegli se riavviare immediatamente o continuare
-7. **Pulizia**: Usa `P` per eliminare snapshot vecchi quando necessario
-8. **Riavvio rapido**: Usa `H` per riavviare quando indicato
+4. **Creazione snapshot**: Usa `I` per creare nuovi snapshot con btrbk
+5. **Selezione**: Scegli snapshot da ripristinare con `ENTER`
+6. **Conferma**: Conferma l'operazione di ripristino
+7. **Reboot**: Scegli se riavviare immediatamente o continuare
+8. **Pulizia**: Usa `P` per eliminare snapshot vecchi quando necessario
+9. **Riavvio rapido**: Usa `H` per riavviare quando indicato
 
 ## Licenza
 
