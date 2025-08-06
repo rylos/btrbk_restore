@@ -257,16 +257,32 @@ impl App {
                     match rx.try_recv() {
                         Ok(line_content) => {
                             if !line_content.trim().is_empty() {
-                                output_lines.push(line_content.clone());
+                                // Clean line: rimuovi caratteri di controllo e normalizza
+                                let cleaned_line = line_content
+                                    .replace('\r', "")  // Rimuovi carriage return
+                                    .replace('\x1b', "") // Rimuovi escape sequences
+                                    .chars()
+                                    .filter(|c| c.is_ascii_graphic() || c.is_ascii_whitespace())
+                                    .collect::<String>();
+                                
+                                // Se la riga contiene progresso (in/out), sostituisci l'ultima riga invece di aggiungerne una nuova
+                                if cleaned_line.contains("in @") && cleaned_line.contains("out @") {
+                                    // Sostituisci l'ultima riga se esiste
+                                    if !output_lines.is_empty() {
+                                        output_lines.pop();
+                                    }
+                                }
+                                
+                                output_lines.push(cleaned_line.clone());
                                 
                                 // Display the line in the output area
                                 let display_y = output_start_y + output_lines.len() as i32 - 1 - current_line;
                                 if display_y >= output_start_y && display_y < output_start_y + output_height {
                                     // Truncate line if too long
-                                    let display_line = if line_content.len() > (output_width - 2) as usize {
-                                        &line_content[..(output_width - 2) as usize]
+                                    let display_line = if cleaned_line.len() > (output_width - 2) as usize {
+                                        &cleaned_line[..(output_width - 2) as usize]
                                     } else {
-                                        &line_content
+                                        &cleaned_line
                                     };
                                     
                                     // Clear line and add content
@@ -288,14 +304,30 @@ impl App {
                                 // Process finished, drain remaining messages
                                 while let Ok(line_content) = rx.try_recv() {
                                     if !line_content.trim().is_empty() {
-                                        output_lines.push(line_content.clone());
+                                        // Clean line: rimuovi caratteri di controllo e normalizza
+                                        let cleaned_line = line_content
+                                            .replace('\r', "")  // Rimuovi carriage return
+                                            .replace('\x1b', "") // Rimuovi escape sequences
+                                            .chars()
+                                            .filter(|c| c.is_ascii_graphic() || c.is_ascii_whitespace())
+                                            .collect::<String>();
+                                        
+                                        // Se la riga contiene progresso (in/out), sostituisci l'ultima riga invece di aggiungerne una nuova
+                                        if cleaned_line.contains("in @") && cleaned_line.contains("out @") {
+                                            // Sostituisci l'ultima riga se esiste
+                                            if !output_lines.is_empty() {
+                                                output_lines.pop();
+                                            }
+                                        }
+                                        
+                                        output_lines.push(cleaned_line.clone());
                                         
                                         let display_y = output_start_y + output_lines.len() as i32 - 1 - current_line;
                                         if display_y >= output_start_y && display_y < output_start_y + output_height {
-                                            let display_line = if line_content.len() > (output_width - 2) as usize {
-                                                &line_content[..(output_width - 2) as usize]
+                                            let display_line = if cleaned_line.len() > (output_width - 2) as usize {
+                                                &cleaned_line[..(output_width - 2) as usize]
                                             } else {
-                                                &line_content
+                                                &cleaned_line
                                             };
                                             
                                             mvaddstr(display_y, 2, &" ".repeat((output_width - 2) as usize));
@@ -668,6 +700,14 @@ impl App {
             _ => return false,
         };
         
+        // FIX: Gestione corretta di @.BROKEN esistente
+        // Se @.BROKEN esiste già, rimuovilo prima
+        if broken_subvol.exists() {
+            if !run_command(&["btrfs", "subvolume", "delete", &broken_subvol.to_string_lossy()]) {
+                return false;
+            }
+        }
+        
         // Move current to .BROKEN
         if !run_command(&["mv", &current_subvol.to_string_lossy(), &broken_subvol.to_string_lossy()]) {
             return false;
@@ -675,6 +715,8 @@ impl App {
         
         // Create new snapshot
         if !run_command(&["btrfs", "subvolume", "snapshot", &source_path.to_string_lossy(), &new_subvol.to_string_lossy()]) {
+            // Rollback: ripristina il subvolume originale
+            run_command(&["mv", &broken_subvol.to_string_lossy(), &current_subvol.to_string_lossy()]);
             return false;
         }
         
@@ -811,10 +853,16 @@ impl App {
         }
         
         let snapshot = &current_snapshots[self.selected_row as usize];
-        let snapshot_type = if current_prefix.starts_with('@') {
-            &current_prefix[1..] // Remove @ prefix
-        } else {
-            current_prefix
+        
+        // FIX: Mapping corretto del snapshot_type
+        let snapshot_type = match current_prefix.as_str() {
+            "@" => "root",           // @ -> root
+            "@home" => "home",       // @home -> home  
+            "@games" => "games",     // @games -> games
+            _ => {
+                self.set_status("Unknown snapshot type!", 100);
+                return;
+            }
         };
         
         if !self.confirm_dialog(&format!("Restore {} snapshot?", snapshot_type)) {
@@ -826,11 +874,8 @@ impl App {
         refresh();
         
         if self.restore_snapshot(snapshot, snapshot_type) {
-            self.reboot_needed = true;  // Set reboot flag
-            self.set_status("Snapshot restored! Press H to reboot or continue working", 200);
-            if self.confirm_dialog("Reboot system now?") {
-                run_command(&["reboot"]);
-            }
+            self.reboot_needed = true;  // Set reboot flag per TUTTI i restore
+            self.set_status(&format!("{} snapshot restored! Press H to reboot when ready", snapshot_type), 200);
         } else {
             self.set_status("Failed to restore snapshot!", 100);
         }
