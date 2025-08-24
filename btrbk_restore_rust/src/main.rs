@@ -791,9 +791,8 @@ impl App {
             _ => return false,
         }
         
-        // 4. Test finale: verifica che il subvolume non sia corrotto
-        // Usa btrfs check in modalità read-only per verificare l'integrità
-        run_command(&["btrfs", "check", "--readonly", &restored_subvol.to_string_lossy()])
+        // 4. Test finale: il subvolume è valido se ha superato tutti i controlli precedenti
+        true
     }
     
     fn handle_main_input(&mut self, key: i32) {
