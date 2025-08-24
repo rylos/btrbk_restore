@@ -476,7 +476,7 @@ impl App {
     fn draw_header(&self) {
         let (_, width) = get_max_yx();
         
-        let title = "BTRBK Restore Tool v2.0";
+        let title = "BTRBK Restore Tool v2.1";
         attron(COLOR_PAIR(5) | A_BOLD());
         let centered_title = format!("{:^width$}", title, width = width as usize);
         mvaddstr(0, 0, &centered_title[..std::cmp::min(centered_title.len(), width as usize - 1)]);
@@ -720,12 +720,80 @@ impl App {
             return false;
         }
         
-        // Auto cleanup if enabled
+        // Verifica che il restore sia andato a buon fine
+        let restore_successful = self.verify_restore_success(&new_subvol, snapshot_type);
+        
+        if !restore_successful {
+            // Rollback completo: rimuovi il subvolume fallito e ripristina l'originale
+            run_command(&["btrfs", "subvolume", "delete", &new_subvol.to_string_lossy()]);
+            run_command(&["mv", &broken_subvol.to_string_lossy(), &current_subvol.to_string_lossy()]);
+            return false;
+        }
+        
+        // Auto cleanup if enabled - rimuovi .BROKEN solo se il restore è andato a buon fine
         if self.config.auto_cleanup {
             run_command(&["btrfs", "subvolume", "delete", &broken_subvol.to_string_lossy()]);
         }
         
         true
+    }
+    
+    fn verify_restore_success(&self, restored_subvol: &Path, snapshot_type: &str) -> bool {
+        // 1. Verifica che il subvolume esista ed sia effettivamente un subvolume btrfs
+        if !restored_subvol.exists() {
+            return false;
+        }
+        
+        // 2. Verifica che sia un subvolume btrfs valido
+        if !run_command(&["btrfs", "subvolume", "show", &restored_subvol.to_string_lossy()]) {
+            return false;
+        }
+        
+        // 3. Verifica file/directory critici in base al tipo di subvolume
+        match snapshot_type {
+            "root" => {
+                // Per il root, verifica directory essenziali
+                let critical_dirs = ["etc", "usr", "var", "bin"];
+                for dir in &critical_dirs {
+                    let dir_path = restored_subvol.join(dir);
+                    if !dir_path.exists() {
+                        return false;
+                    }
+                }
+                
+                // Verifica file critici
+                let critical_files = ["etc/fstab", "etc/passwd"];
+                for file in &critical_files {
+                    let file_path = restored_subvol.join(file);
+                    if !file_path.exists() || !file_path.is_file() {
+                        return false;
+                    }
+                }
+            }
+            "home" => {
+                // Per home, verifica che non sia vuoto (dovrebbe avere almeno qualche directory utente)
+                match fs::read_dir(restored_subvol) {
+                    Ok(entries) => {
+                        if entries.count() == 0 {
+                            return false; // Home vuota è sospetta
+                        }
+                    }
+                    Err(_) => return false,
+                }
+            }
+            "games" => {
+                // Per games, verifica che la directory esista e sia accessibile
+                match fs::read_dir(restored_subvol) {
+                    Ok(_) => {}, // OK se riusciamo a leggere la directory
+                    Err(_) => return false,
+                }
+            }
+            _ => return false,
+        }
+        
+        // 4. Test finale: verifica che il subvolume non sia corrotto
+        // Usa btrfs check in modalità read-only per verificare l'integrità
+        run_command(&["btrfs", "check", "--readonly", &restored_subvol.to_string_lossy()])
     }
     
     fn handle_main_input(&mut self, key: i32) {
