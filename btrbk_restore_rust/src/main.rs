@@ -557,12 +557,12 @@ impl App {
         let keys = if self.reboot_needed {
             vec![
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "B: Clean BROKEN", "H: REBOOT", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge OLD", "B: Clean BROKEN", "H: REBOOT", "Q: Quit"
             ]
         } else {
             vec![
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "B: Clean BROKEN", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge OLD", "B: Clean BROKEN", "Q: Quit"
             ]
         };
         let footer_text = keys.join(" | ");

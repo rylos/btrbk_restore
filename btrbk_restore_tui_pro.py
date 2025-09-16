@@ -309,12 +309,12 @@ class TUIApp:
         if self.reboot_needed:
             keys = [
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "B: Clean BROKEN", "H: REBOOT", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge OLD", "B: Clean BROKEN", "H: REBOOT", "Q: Quit"
             ]
         else:
             keys = [
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "B: Clean BROKEN", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge OLD", "B: Clean BROKEN", "Q: Quit"
             ]
         footer_text = " | ".join(keys)
         
