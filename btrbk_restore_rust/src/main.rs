@@ -287,13 +287,8 @@ impl App {
                                 let display_y = output_start_y + output_lines.len() as i32 - 1 - current_line;
                                 if display_y >= output_start_y && display_y < output_start_y + output_height {
                                     // Truncate line if too long
-<<<<<<< HEAD
-                                    let display_line = if cleaned_line.len() > (output_width - 2) as usize {
-                                        &cleaned_line[..(output_width - 2) as usize]
-=======
-                                    let display_line = if line_content.len() > width as usize {
-                                        &line_content[..width as usize]
->>>>>>> 1db4f6f (v2.2: Fix critical bugs - timestamp parsing, .BROKEN conflicts, dynamic restore logic, simplified UI)
+                                    let display_line = if cleaned_line.len() > width as usize {
+                                        &cleaned_line[..width as usize]
                                     } else {
                                         &cleaned_line
                                     };
@@ -337,13 +332,8 @@ impl App {
                                         
                                         let display_y = output_start_y + output_lines.len() as i32 - 1 - current_line;
                                         if display_y >= output_start_y && display_y < output_start_y + output_height {
-<<<<<<< HEAD
-                                            let display_line = if cleaned_line.len() > (output_width - 2) as usize {
-                                                &cleaned_line[..(output_width - 2) as usize]
-=======
-                                            let display_line = if line_content.len() > width as usize {
-                                                &line_content[..width as usize]
->>>>>>> 1db4f6f (v2.2: Fix critical bugs - timestamp parsing, .BROKEN conflicts, dynamic restore logic, simplified UI)
+                                            let display_line = if cleaned_line.len() > width as usize {
+                                                &cleaned_line[..width as usize]
                                             } else {
                                                 &cleaned_line
                                             };
@@ -718,21 +708,11 @@ impl App {
             format!("@{}", snapshot_type)
         };
         
-<<<<<<< HEAD
-        // FIX: Gestione corretta di @.BROKEN esistente
-        // Se @.BROKEN esiste già, rimuovilo prima
-        if broken_subvol.exists() {
-            if !run_command(&["btrfs", "subvolume", "delete", &broken_subvol.to_string_lossy()]) {
-                return false;
-            }
-        }
-=======
         let current_subvol = Path::new(&self.config.btr_pool_dir).join(&subvol_name);
         // Generate unique .BROKEN name with timestamp
         let timestamp = Local::now().format("%Y%m%d_%H%M%S");
         let broken_subvol = Path::new(&self.config.btr_pool_dir).join(format!("{}.BROKEN.{}", subvol_name, timestamp));
         let new_subvol = Path::new(&self.config.btr_pool_dir).join(&subvol_name);
->>>>>>> 1db4f6f (v2.2: Fix critical bugs - timestamp parsing, .BROKEN conflicts, dynamic restore logic, simplified UI)
         
         // Move current to .BROKEN
         if !run_command(&["mv", &current_subvol.to_string_lossy(), &broken_subvol.to_string_lossy()]) {
@@ -946,18 +926,7 @@ impl App {
         }
         
         let snapshot = &current_snapshots[self.selected_row as usize];
-<<<<<<< HEAD
         
-        // FIX: Mapping corretto del snapshot_type
-        let snapshot_type = match current_prefix.as_str() {
-            "@" => "root",           // @ -> root
-            "@home" => "home",       // @home -> home  
-            "@games" => "games",     // @games -> games
-            _ => {
-                self.set_status("Unknown snapshot type!", 100);
-                return;
-            }
-=======
         // Extract snapshot type from prefix
         let snapshot_type = if current_prefix == "@" {
             "root"  // Special case for root subvolume
@@ -965,7 +934,6 @@ impl App {
             &current_prefix[1..]  // Remove @ prefix for others
         } else {
             current_prefix
->>>>>>> 1db4f6f (v2.2: Fix critical bugs - timestamp parsing, .BROKEN conflicts, dynamic restore logic, simplified UI)
         };
         
         if !self.confirm_dialog(&format!("Restore {} snapshot?", snapshot_type)) {
