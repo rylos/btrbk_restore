@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import os
 import subprocess
+from datetime import datetime
 
 # Configura le cartelle
 btr_pool_dir = "/mnt/btr_pool"
@@ -37,6 +38,29 @@ def get_snapshot_groups():
         print(f"Error reading snapshots: {e}")
         exit(1)
 
+def format_snapshot_name(snapshot):
+    """Format snapshot name with timestamp (optional)."""
+    try:
+        if '.' in snapshot and snapshot.startswith('@'):
+            # Find the prefix and extract timestamp
+            prefix = snapshot.split('.')[0]
+            timestamp_str = snapshot[len(prefix) + 1:]  # +1 for the dot
+            
+            # Try multiple timestamp formats
+            try:
+                dt = datetime.strptime(timestamp_str, "%Y%m%dT%H%M")
+                return f"{snapshot} ({dt.strftime('%Y-%m-%d %H:%M:%S')})"
+            except ValueError:
+                try:
+                    dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                    return f"{snapshot} ({dt.strftime('%Y-%m-%d %H:%M:%S')})"
+                except ValueError:
+                    return snapshot
+        else:
+            return snapshot
+    except (ValueError, IndexError):
+        return snapshot
+
 def display_snapshots(snapshot_groups):
     """Display snapshots organized by groups."""
     if not snapshot_groups:
@@ -57,7 +81,8 @@ def display_snapshots(snapshot_groups):
         print(f"\n--- {prefix.upper()} ({len(snapshots)} snapshots) ---")
         
         for snapshot in snapshots:
-            print(f"{counter}. {snapshot}")
+            formatted_name = format_snapshot_name(snapshot)
+            print(f"{counter}. {formatted_name}")
             snapshot_list.append((snapshot, prefix))
             counter += 1
     
@@ -67,14 +92,16 @@ def restore_snapshot(selected_snapshot, prefix):
     """Restore the selected snapshot."""
     source_path = os.path.join(snapshots_dir, selected_snapshot)
     
-    # Determine the target subvolume name
+    # Determine the target subvolume name (consistent with TUI versions)
     if prefix == '@':
         subvolume_name = '@'
     else:
-        subvolume_name = prefix  # @home, @games, @custom, etc.
+        subvolume_name = prefix  # Keep full prefix (@home, @games, @custom, etc.)
     
     target_path = os.path.join(btr_pool_dir, subvolume_name)
-    broken_path = f"{target_path}.BROKEN"
+    # Generate unique .BROKEN name with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    broken_path = f"{target_path}.BROKEN.{timestamp}"
     
     print(f"\nRipristino snapshot: {selected_snapshot}")
     print(f"Tipo: {prefix}")

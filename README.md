@@ -16,7 +16,7 @@ This project provides tools to easily restore Btrfs subvolume snapshots created 
 - System reboot with visual indicators
 - Optionally reboot the system after restoration
 
-## ✨ Features v2.1 - Dynamic Group Management
+## ✨ Features v2.2 - Bug Fixes & Improvements
 
 ### 🔄 **Automatic Detection:**
 - **No longer limited** to 3 fixed types (@, @home, @games)
@@ -24,11 +24,31 @@ This project provides tools to easily restore Btrfs subvolume snapshots created 
 - **Detects any prefix** (@, @home, @games, @custom, @backup, @work, etc.)
 - **Automatically adapts** to any user's btrbk configuration
 
+### 🐛 **Critical Bug Fixes:**
+- **Fixed timestamp parsing** - Now supports both `YYYYMMDDTHHMMSS` and `YYYYMMDD_HHMMSS` formats
+- **Fixed .BROKEN conflicts** - Unique timestamps prevent restore failures
+- **Fixed hardcoded restore logic** - Now fully dynamic for all subvolume types
+- **Fixed purge function** - Dynamic detection instead of hardcoded types
+- **Simplified log display** - Removed problematic side borders
+
 ### 📊 **Adaptive Interface:**
 - **Dynamic columns**: Number of columns adapts to groups found
 - **Automatic width**: Columns resize automatically
 - **Smart sorting**: @ always first, then alphabetical order
 - **Snapshot count**: Shows number of snapshots per group
+
+### 🎯 **Supported Configuration Examples:**
+```
+Basic User:     @ | @home
+Gaming User:    @ | @home | @games  
+Pro User:       @ | @home | @games | @work | @backup
+Server User:    @ | @home | @var | @opt | @srv | @data
+```
+
+### 🎨 **Enhanced Interface:**
+- **Separator lines** at full screen width
+- **Perfect visual consistency** between header and footer
+- **Optimized colors** for better readability
 
 ### 🎯 **Supported Configuration Examples:**
 ```

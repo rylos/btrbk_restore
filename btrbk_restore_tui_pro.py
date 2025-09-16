@@ -113,9 +113,16 @@ class SnapshotManager:
                 prefix = snapshot.split('.')[0]
                 timestamp_str = snapshot[len(prefix) + 1:]  # +1 for the dot
                 
-                # Parse timestamp (format: YYYYMMDD_HHMMSS)
-                dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
-                return f"{snapshot} ({dt.strftime('%Y-%m-%d %H:%M:%S')})"
+                # Try multiple timestamp formats
+                try:
+                    dt = datetime.strptime(timestamp_str, "%Y%m%dT%H%M")
+                    return f"{snapshot} ({dt.strftime('%Y-%m-%d %H:%M:%S')})"
+                except ValueError:
+                    try:
+                        dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                        return f"{snapshot} ({dt.strftime('%Y-%m-%d %H:%M:%S')})"
+                    except ValueError:
+                        return snapshot
             else:
                 return snapshot
         except (ValueError, IndexError):
@@ -130,20 +137,17 @@ class SnapshotManager:
         
         source_path = os.path.join(snapshots_dir, snapshot)
         
-        if snapshot_type == "root":
-            current_subvol = os.path.join(btr_pool_dir, "@")
-            broken_subvol = os.path.join(btr_pool_dir, "@.BROKEN")
-            new_subvol = os.path.join(btr_pool_dir, "@")
-        elif snapshot_type == "home":
-            current_subvol = os.path.join(btr_pool_dir, "@home")
-            broken_subvol = os.path.join(btr_pool_dir, "@home.BROKEN")
-            new_subvol = os.path.join(btr_pool_dir, "@home")
-        elif snapshot_type == "games":
-            current_subvol = os.path.join(btr_pool_dir, "@games")
-            broken_subvol = os.path.join(btr_pool_dir, "@games.BROKEN")
-            new_subvol = os.path.join(btr_pool_dir, "@games")
+        # Dynamic subvolume path generation
+        if snapshot_type == "root" or snapshot_type == "":
+            subvol_name = "@"
         else:
-            return False
+            subvol_name = f"@{snapshot_type}"
+        
+        current_subvol = os.path.join(btr_pool_dir, subvol_name)
+        # Generate unique .BROKEN name with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        broken_subvol = os.path.join(btr_pool_dir, f"{subvol_name}.BROKEN.{timestamp}")
+        new_subvol = os.path.join(btr_pool_dir, subvol_name)
         
         try:
             # Move current subvolume to .BROKEN
@@ -162,6 +166,62 @@ class SnapshotManager:
             return True
         except subprocess.CalledProcessError:
             return False
+
+    def purge_old_snapshots(self) -> Tuple[int, List[str]]:
+        """Purge old snapshots, keeping only the most recent per type."""
+        snapshots_dir = self.config.get("snapshots_dir")
+        
+        try:
+            all_snapshots = []
+            for item in os.listdir(snapshots_dir):
+                item_path = os.path.join(snapshots_dir, item)
+                if os.path.isdir(item_path) and item.startswith('@') and '.' in item:
+                    all_snapshots.append(item_path)
+            
+            if not all_snapshots:
+                return 0, []
+            
+            # Sort snapshots
+            all_snapshots.sort()
+            
+            # Get all unique prefixes dynamically
+            prefixes = set()
+            for snapshot_path in all_snapshots:
+                basename = os.path.basename(snapshot_path)
+                if '.' in basename:
+                    prefix = basename.split('.')[0]
+                    if prefix.startswith('@'):
+                        prefixes.add(prefix)
+            
+            # Find old snapshots to delete for each prefix
+            to_delete = []
+            for prefix in prefixes:
+                type_snapshots = [s for s in all_snapshots 
+                                if os.path.basename(s).startswith(f"{prefix}.")]
+                
+                if len(type_snapshots) > 1:
+                    # Keep the last (most recent) one, delete the rest
+                    to_delete.extend(type_snapshots[:-1])
+            
+            if not to_delete:
+                return 0, []
+            
+            # Delete old snapshots
+            deleted_count = 0
+            deleted_names = []
+            for snapshot_path in to_delete:
+                try:
+                    subprocess.run(["btrfs", "subvolume", "delete", snapshot_path], 
+                                 check=True, capture_output=True, text=True)
+                    deleted_count += 1
+                    deleted_names.append(os.path.basename(snapshot_path))
+                except subprocess.CalledProcessError:
+                    continue  # Continue with other deletions even if one fails
+            
+            return deleted_count, deleted_names
+            
+        except Exception:
+            return -1, []  # Error occurred
 
 class TUIApp:
     """Main TUI application."""
@@ -285,18 +345,14 @@ class TUIApp:
         stdscr.addstr(6, (width - len(instruction)) // 2, instruction)
         stdscr.attroff(curses.A_DIM)
         
-        # Create output window
+        # Simple output area - only horizontal borders
         output_start_y = 8
         output_height = height - 12
-        output_width = width - 4
         
-        # Draw border for output area
-        for i in range(output_height + 2):
-            stdscr.addstr(output_start_y - 1 + i, 1, "|")
-            stdscr.addstr(output_start_y - 1 + i, width - 2, "|")
-        
-        stdscr.addstr(output_start_y - 1, 1, "+" + "-" * (width - 4) + "+")
-        stdscr.addstr(output_start_y + output_height, 1, "+" + "-" * (width - 4) + "+")
+        # Draw simple horizontal borders
+        border = "-" * width
+        stdscr.addstr(output_start_y - 1, 0, border)
+        stdscr.addstr(output_start_y + output_height, 0, border)
         
         stdscr.refresh()
         
@@ -335,9 +391,9 @@ class TUIApp:
                         display_y = output_start_y + len(output_lines) - 1 - current_line
                         if display_y >= output_start_y and display_y < output_start_y + output_height:
                             # Truncate line if too long
-                            display_line = line[:output_width - 2] if len(line) > output_width - 2 else line
-                            stdscr.addstr(display_y, 2, " " * (output_width - 2))  # Clear line
-                            stdscr.addstr(display_y, 2, display_line)
+                            display_line = line[:width] if len(line) > width else line
+                            stdscr.addstr(display_y, 0, " " * width)  # Clear line (full width)
+                            stdscr.addstr(display_y, 0, display_line)
                         
                         # Auto-scroll if needed
                         if len(output_lines) > output_height:
@@ -432,6 +488,10 @@ class TUIApp:
             
         except Exception:
             return -1, []  # Error occurred
+
+    def purge_old_snapshots(self) -> Tuple[int, List[str]]:
+        """Purge old snapshots using SnapshotManager."""
+        return self.snapshot_manager.purge_old_snapshots()
     
     def draw_main_screen(self, stdscr):
         """Draw main snapshot selection screen with dynamic columns."""
@@ -729,7 +789,13 @@ class TUIApp:
             return
         
         snapshot = current_snapshots[self.selected_row]
-        snapshot_type = current_prefix[1:] if current_prefix.startswith('@') else current_prefix  # Remove @ prefix
+        # Extract snapshot type from prefix
+        if current_prefix == "@":
+            snapshot_type = "root"  # Special case for root subvolume
+        elif current_prefix.startswith('@'):
+            snapshot_type = current_prefix[1:]  # Remove @ prefix for others
+        else:
+            snapshot_type = current_prefix
         
         # Confirm restoration
         if not self.confirm_dialog(stdscr, f"Restore {snapshot_type} snapshot?"):

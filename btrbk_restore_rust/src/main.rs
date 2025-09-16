@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use chrono::NaiveDateTime;
+use chrono::{Local, NaiveDateTime};
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Config {
@@ -134,7 +134,10 @@ impl App {
             if parts.len() >= 2 {
                 let timestamp_str = parts[1];
                 
-                if let Ok(dt) = NaiveDateTime::parse_from_str(timestamp_str, "%Y%m%d_%H%M%S") {
+                // Try multiple timestamp formats
+                if let Ok(dt) = NaiveDateTime::parse_from_str(timestamp_str, "%Y%m%dT%H%M") {
+                    return format!("{} ({})", snapshot, dt.format("%Y-%m-%d %H:%M:%S"));
+                } else if let Ok(dt) = NaiveDateTime::parse_from_str(timestamp_str, "%Y%m%d_%H%M%S") {
                     return format!("{} ({})", snapshot, dt.format("%Y-%m-%d %H:%M:%S"));
                 }
             }
@@ -182,20 +185,14 @@ impl App {
         mvaddstr(6, (width - instruction.len() as i32) / 2, instruction);
         attroff(A_DIM());
         
-        // Create output window border
+        // Simple output area - only horizontal borders
         let output_start_y = 8;
         let output_height = height - 12;
-        let output_width = width - 4;
         
-        // Draw border
-        for i in 0..output_height + 2 {
-            mvaddstr(output_start_y - 1 + i, 1, "|");
-            mvaddstr(output_start_y - 1 + i, width - 2, "|");
-        }
-        
-        let border = format!("+{}+", "-".repeat((width - 4) as usize));
-        mvaddstr(output_start_y - 1, 1, &border);
-        mvaddstr(output_start_y + output_height, 1, &border);
+        // Draw simple horizontal borders
+        let border = "-".repeat(width as usize);
+        mvaddstr(output_start_y - 1, 0, &border);
+        mvaddstr(output_start_y + output_height, 0, &border);
         
         refresh();
         
@@ -247,8 +244,19 @@ impl App {
                     // Check for ESC key
                     let key = getch();
                     if key == 27 {  // ESC
+                        // Safely terminate process and threads
                         let _ = process.kill();
+                        
+                        // Give threads time to finish reading
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        
+                        // Wait for process to actually terminate
                         let _ = process.wait();
+                        
+                        // Try to join threads with timeout
+                        let _ = stdout_thread.join();
+                        let _ = stderr_thread.join();
+                        
                         timeout(100);
                         return (false, "Operation cancelled by user".to_string());
                     }
@@ -279,15 +287,20 @@ impl App {
                                 let display_y = output_start_y + output_lines.len() as i32 - 1 - current_line;
                                 if display_y >= output_start_y && display_y < output_start_y + output_height {
                                     // Truncate line if too long
+<<<<<<< HEAD
                                     let display_line = if cleaned_line.len() > (output_width - 2) as usize {
                                         &cleaned_line[..(output_width - 2) as usize]
+=======
+                                    let display_line = if line_content.len() > width as usize {
+                                        &line_content[..width as usize]
+>>>>>>> 1db4f6f (v2.2: Fix critical bugs - timestamp parsing, .BROKEN conflicts, dynamic restore logic, simplified UI)
                                     } else {
                                         &cleaned_line
                                     };
                                     
-                                    // Clear line and add content
-                                    mvaddstr(display_y, 2, &" ".repeat((output_width - 2) as usize));
-                                    mvaddstr(display_y, 2, display_line);
+                                    // Clear line and add content (full width)
+                                    mvaddstr(display_y, 0, &" ".repeat(width as usize));
+                                    mvaddstr(display_y, 0, display_line);
                                 }
                                 
                                 // Auto-scroll if needed
@@ -324,14 +337,19 @@ impl App {
                                         
                                         let display_y = output_start_y + output_lines.len() as i32 - 1 - current_line;
                                         if display_y >= output_start_y && display_y < output_start_y + output_height {
+<<<<<<< HEAD
                                             let display_line = if cleaned_line.len() > (output_width - 2) as usize {
                                                 &cleaned_line[..(output_width - 2) as usize]
+=======
+                                            let display_line = if line_content.len() > width as usize {
+                                                &line_content[..width as usize]
+>>>>>>> 1db4f6f (v2.2: Fix critical bugs - timestamp parsing, .BROKEN conflicts, dynamic restore logic, simplified UI)
                                             } else {
                                                 &cleaned_line
                                             };
                                             
-                                            mvaddstr(display_y, 2, &" ".repeat((output_width - 2) as usize));
-                                            mvaddstr(display_y, 2, display_line);
+                                            mvaddstr(display_y, 0, &" ".repeat(width as usize));
+                                            mvaddstr(display_y, 0, display_line);
                                         }
                                         
                                         if output_lines.len() > output_height as usize {
@@ -408,7 +426,7 @@ impl App {
                         let entry = entry.ok()?;
                         if entry.path().is_dir() {
                             let name = entry.file_name().to_string_lossy().into_owned();
-                            if name.starts_with("@.") || name.starts_with("@home.") || name.starts_with("@games.") {
+                            if name.starts_with('@') && name.contains('.') {
                                 Some(entry.path().to_string_lossy().into_owned())
                             } else {
                                 None
@@ -446,9 +464,21 @@ impl App {
                     }
                 };
                 
-                process_type("@", &all_snapshots, &mut to_delete);
-                process_type("@home", &all_snapshots, &mut to_delete);
-                process_type("@games", &all_snapshots, &mut to_delete);
+                // Get all unique prefixes dynamically
+                let mut prefixes = std::collections::HashSet::new();
+                for snapshot_path in &all_snapshots {
+                    let basename = snapshot_path.split('/').last().unwrap_or("");
+                    if let Some(prefix) = basename.split('.').next() {
+                        if prefix.starts_with('@') {
+                            prefixes.insert(prefix.to_string());
+                        }
+                    }
+                }
+                
+                // Process each prefix dynamically
+                for prefix in prefixes {
+                    process_type(&prefix, &all_snapshots, &mut to_delete);
+                }
                 
                 if to_delete.is_empty() {
                     return (0, Vec::new());
@@ -681,25 +711,14 @@ impl App {
     fn restore_snapshot(&self, snapshot: &str, snapshot_type: &str) -> bool {
         let source_path = Path::new(&self.config.snapshots_dir).join(snapshot);
         
-        let (current_subvol, broken_subvol, new_subvol) = match snapshot_type {
-            "root" => (
-                Path::new(&self.config.btr_pool_dir).join("@"),
-                Path::new(&self.config.btr_pool_dir).join("@.BROKEN"),
-                Path::new(&self.config.btr_pool_dir).join("@"),
-            ),
-            "home" => (
-                Path::new(&self.config.btr_pool_dir).join("@home"),
-                Path::new(&self.config.btr_pool_dir).join("@home.BROKEN"),
-                Path::new(&self.config.btr_pool_dir).join("@home"),
-            ),
-            "games" => (
-                Path::new(&self.config.btr_pool_dir).join("@games"),
-                Path::new(&self.config.btr_pool_dir).join("@games.BROKEN"),
-                Path::new(&self.config.btr_pool_dir).join("@games"),
-            ),
-            _ => return false,
+        // Dynamic subvolume path generation
+        let subvol_name = if snapshot_type.is_empty() || snapshot_type == "root" {
+            "@".to_string()
+        } else {
+            format!("@{}", snapshot_type)
         };
         
+<<<<<<< HEAD
         // FIX: Gestione corretta di @.BROKEN esistente
         // Se @.BROKEN esiste già, rimuovilo prima
         if broken_subvol.exists() {
@@ -707,6 +726,13 @@ impl App {
                 return false;
             }
         }
+=======
+        let current_subvol = Path::new(&self.config.btr_pool_dir).join(&subvol_name);
+        // Generate unique .BROKEN name with timestamp
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+        let broken_subvol = Path::new(&self.config.btr_pool_dir).join(format!("{}.BROKEN.{}", subvol_name, timestamp));
+        let new_subvol = Path::new(&self.config.btr_pool_dir).join(&subvol_name);
+>>>>>>> 1db4f6f (v2.2: Fix critical bugs - timestamp parsing, .BROKEN conflicts, dynamic restore logic, simplified UI)
         
         // Move current to .BROKEN
         if !run_command(&["mv", &current_subvol.to_string_lossy(), &broken_subvol.to_string_lossy()]) {
@@ -920,6 +946,7 @@ impl App {
         }
         
         let snapshot = &current_snapshots[self.selected_row as usize];
+<<<<<<< HEAD
         
         // FIX: Mapping corretto del snapshot_type
         let snapshot_type = match current_prefix.as_str() {
@@ -930,6 +957,15 @@ impl App {
                 self.set_status("Unknown snapshot type!", 100);
                 return;
             }
+=======
+        // Extract snapshot type from prefix
+        let snapshot_type = if current_prefix == "@" {
+            "root"  // Special case for root subvolume
+        } else if current_prefix.starts_with('@') {
+            &current_prefix[1..]  // Remove @ prefix for others
+        } else {
+            current_prefix
+>>>>>>> 1db4f6f (v2.2: Fix critical bugs - timestamp parsing, .BROKEN conflicts, dynamic restore logic, simplified UI)
         };
         
         if !self.confirm_dialog(&format!("Restore {} snapshot?", snapshot_type)) {
