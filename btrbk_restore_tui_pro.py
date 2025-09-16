@@ -222,6 +222,39 @@ class SnapshotManager:
             
         except Exception:
             return -1, []  # Error occurred
+    
+    def clean_broken_subvolumes(self) -> Tuple[int, List[str]]:
+        """Clean all .BROKEN subvolumes."""
+        btr_pool_dir = self.config.get("btr_pool_dir")
+        
+        try:
+            broken_subvolumes = []
+            
+            # Find all .BROKEN subvolumes
+            for item in os.listdir(btr_pool_dir):
+                item_path = os.path.join(btr_pool_dir, item)
+                if os.path.isdir(item_path) and ".BROKEN" in item:
+                    broken_subvolumes.append(item_path)
+            
+            if not broken_subvolumes:
+                return 0, []
+            
+            # Delete .BROKEN subvolumes
+            deleted_count = 0
+            deleted_names = []
+            for subvol_path in broken_subvolumes:
+                try:
+                    subprocess.run(["btrfs", "subvolume", "delete", subvol_path], 
+                                 check=True, capture_output=True, text=True)
+                    deleted_count += 1
+                    deleted_names.append(os.path.basename(subvol_path))
+                except subprocess.CalledProcessError:
+                    continue  # Continue with other deletions even if one fails
+            
+            return deleted_count, deleted_names
+            
+        except Exception:
+            return -1, []  # Error occurred
 
 class TUIApp:
     """Main TUI application."""
@@ -276,12 +309,12 @@ class TUIApp:
         if self.reboot_needed:
             keys = [
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "H: REBOOT", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "B: Clean BROKEN", "H: REBOOT", "Q: Quit"
             ]
         else:
             keys = [
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select", 
-                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "B: Clean BROKEN", "Q: Quit"
             ]
         footer_text = " | ".join(keys)
         
@@ -492,6 +525,10 @@ class TUIApp:
     def purge_old_snapshots(self) -> Tuple[int, List[str]]:
         """Purge old snapshots using SnapshotManager."""
         return self.snapshot_manager.purge_old_snapshots()
+    
+    def clean_broken_subvolumes(self) -> Tuple[int, List[str]]:
+        """Clean .BROKEN subvolumes using SnapshotManager."""
+        return self.snapshot_manager.clean_broken_subvolumes()
     
     def draw_main_screen(self, stdscr):
         """Draw main snapshot selection screen with dynamic columns."""
@@ -766,6 +803,22 @@ class TUIApp:
                     self.set_status(f"Purged {deleted_count} old snapshots successfully", 150)
             else:
                 self.set_status("Purge cancelled")
+        elif key in [ord('b'), ord('B')]:
+            # Clean all .BROKEN subvolumes
+            if self.confirm_dialog(stdscr, "Delete all .BROKEN subvolumes?"):
+                self.set_status("Cleaning .BROKEN subvolumes...", 100)
+                stdscr.refresh()
+                
+                deleted_count, deleted_list = self.clean_broken_subvolumes()
+                
+                if deleted_count == -1:
+                    self.set_status("Error during cleanup operation!", 100)
+                elif deleted_count == 0:
+                    self.set_status("No .BROKEN subvolumes found", 100)
+                else:
+                    self.set_status(f"Cleaned {deleted_count} .BROKEN subvolumes successfully", 150)
+            else:
+                self.set_status("Cleanup cancelled")
         elif key in [ord('i'), ord('I')]:
             # Create new snapshots
             if self.confirm_dialog(stdscr, "Create new snapshots with btrbk?"):

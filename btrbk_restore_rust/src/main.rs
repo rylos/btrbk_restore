@@ -493,6 +493,50 @@ impl App {
         }
     }
     
+    fn clean_broken_subvolumes(&self) -> (i32, Vec<String>) {
+        let btr_pool_dir = &self.config.btr_pool_dir;
+        
+        match std::fs::read_dir(btr_pool_dir) {
+            Ok(entries) => {
+                let mut broken_subvolumes = Vec::new();
+                
+                // Find all .BROKEN subvolumes
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                                if name.contains(".BROKEN") {
+                                    broken_subvolumes.push(path);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if broken_subvolumes.is_empty() {
+                    return (0, Vec::new());
+                }
+                
+                // Delete .BROKEN subvolumes
+                let mut deleted_count = 0;
+                let mut deleted_names = Vec::new();
+                
+                for subvol_path in broken_subvolumes {
+                    if let Some(name) = subvol_path.file_name().and_then(|n| n.to_str()) {
+                        if run_command(&["btrfs", "subvolume", "delete", &subvol_path.to_string_lossy()]) {
+                            deleted_count += 1;
+                            deleted_names.push(name.to_string());
+                        }
+                    }
+                }
+                
+                (deleted_count, deleted_names)
+            }
+            Err(_) => (-1, Vec::new()), // Error occurred
+        }
+    }
+    
     fn draw_header(&self) {
         let (_, width) = get_max_yx();
         
@@ -513,12 +557,12 @@ impl App {
         let keys = if self.reboot_needed {
             vec![
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "H: REBOOT", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "B: Clean BROKEN", "H: REBOOT", "Q: Quit"
             ]
         } else {
             vec![
                 "Up/Down: Navigate", "Left/Right: Switch", "ENTER: Select",
-                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "Q: Quit"
+                "S: Settings", "R: Refresh", "I: Snapshot", "P: Purge", "B: Clean BROKEN", "Q: Quit"
             ]
         };
         let footer_text = keys.join(" | ");
@@ -893,6 +937,25 @@ impl App {
                     }
                 } else {
                     self.set_status("Purge cancelled", 50);
+                }
+            }
+            98 | 66 => {  // 'b' or 'B'
+                // Clean all .BROKEN subvolumes
+                if self.confirm_dialog("Delete all .BROKEN subvolumes?") {
+                    self.set_status("Cleaning .BROKEN subvolumes...", 100);
+                    refresh();
+                    
+                    let (deleted_count, _deleted_list) = self.clean_broken_subvolumes();
+                    
+                    if deleted_count == -1 {
+                        self.set_status("Error during cleanup operation!", 100);
+                    } else if deleted_count == 0 {
+                        self.set_status("No .BROKEN subvolumes found", 100);
+                    } else {
+                        self.set_status(&format!("Cleaned {} .BROKEN subvolumes successfully", deleted_count), 150);
+                    }
+                } else {
+                    self.set_status("Cleanup cancelled", 50);
                 }
             }
             105 | 73 => {  // 'i' or 'I'
