@@ -1,27 +1,64 @@
-# BTRBK Restore Tool - Project Overview
+# BTRBK Restore Tool v2.2 - Project Overview
 
-## Purpose
-Tool completo per il ripristino di snapshot Btrfs creati con btrbk. Fornisce interfacce multiple (CLI, TUI) per gestire snapshot di subvolumi Btrfs con rilevamento automatico dei tipi di snapshot.
+## Current Version: v2.2 - Bug Fixes & Major Improvements
 
-## Tech Stack
-- **Python 3.12.8**: Versioni CLI e TUI Pro
-- **Rust 1.87.0**: Versione TUI ad alte prestazioni
-- **ncurses**: Per interfacce TUI
-- **JSON**: Configurazione condivisa tra versioni
-- **Btrfs**: Filesystem target
-- **btrbk**: Tool per creazione snapshot
+### 🐛 Critical Bug Fixes Applied:
+- **Fixed timestamp parsing** - Now supports both `YYYYMMDDTHHMMSS` and `YYYYMMDD_HHMMSS` formats
+- **Fixed .BROKEN conflicts** - Unique timestamps prevent restore failures (`@.BROKEN.20250916_112530`)
+- **Fixed hardcoded restore logic** - Now fully dynamic for all subvolume types
+- **Fixed purge function** - Dynamic detection instead of hardcoded types
+- **Fixed merge conflicts** - Rust version now compiles correctly
 
-## Architecture
-- **btrbk_restore.py**: Versione CLI semplice con menu testuale
-- **btrbk_restore_tui_pro.py**: Versione TUI professionale con configurazione persistente
-- **btrbk_restore_rust/**: Versione Rust TUI identica alla Pro Python
-- **Configurazione condivisa**: `~/.config/btrbk_restore/config.json`
+### 🎯 Available Commands in TUI Versions:
 
-## Key Features
-- Rilevamento automatico di tutti i tipi di snapshot (@, @home, @games, @custom, etc.)
-- Interfaccia dinamica che si adatta al numero di gruppi trovati
-- Gestione automatica backup subvolumi esistenti (.BROKEN)
-- Configurazione persistente condivisa tra versioni
-- Creazione snapshot integrata (btrbk run --progress)
-- Pulizia intelligente snapshot vecchi
-- Riavvio sistema con indicatori visivi
+#### Main Screen Commands:
+- **↑↓**: Navigate snapshots vertically
+- **←→**: Switch between snapshot groups (dynamic columns)
+- **ENTER**: Select and restore snapshot
+- **S**: Settings screen (persistent configuration)
+- **R**: Refresh snapshot list
+- **I**: Create new snapshots (btrbk run --progress)
+- **P**: Purge OLD snapshots (keeps only most recent per type)
+- **B**: Clean BROKEN subvolumes (deletes all .BROKEN.* subvolumes)
+- **H**: System reboot (appears after restore operations)
+- **Q**: Quit application
+
+#### Settings Screen Commands:
+- **↑↓**: Navigate settings options
+- **ENTER**: Edit string values
+- **SPACE**: Toggle boolean values
+- **S**: Manual save (auto-save is active)
+- **ESC**: Return to main screen
+
+### 🔧 Dynamic Features:
+- **Auto-detection**: Scans for any @prefix snapshots (@, @home, @games, @custom, @backup, etc.)
+- **Adaptive interface**: Columns automatically adjust to detected groups
+- **Smart sorting**: @ always first, then alphabetical
+- **Timestamp formatting**: Human-readable dates in display
+- **Unique .BROKEN names**: Prevents conflicts during restore
+
+### 📁 Project Structure:
+```
+btrbk_restore/
+├── btrbk_restore.py              # CLI version (simple)
+├── btrbk_restore_tui_pro.py      # Python TUI (professional)
+├── btrbk_restore_rust/           # Rust TUI (high-performance)
+│   ├── src/main.rs              # Rust source
+│   └── target/release/          # Compiled binary
+└── README.md                     # Complete documentation
+```
+
+### 🎨 Interface Labels:
+- **Main bar**: `S: Settings | R: Refresh | I: Snapshot | P: Purge OLD | B: Clean BROKEN | Q: Quit`
+- **With reboot**: `S: Settings | R: Refresh | I: Snapshot | P: Purge OLD | B: Clean BROKEN | H: REBOOT | Q: Quit`
+
+### ✅ All Versions Status:
+- **Python CLI**: ✅ Fixed timestamp parsing, .BROKEN conflicts, dynamic logic
+- **Python TUI**: ✅ All v2.2 fixes + new B command
+- **Rust TUI**: ✅ All v2.2 fixes + new B command + merge conflicts resolved
+
+### 🚀 Latest Updates (v2.2):
+- Added "B: Clean BROKEN" command to both TUI versions
+- Changed "P: Purge" to "P: Purge OLD" for clarity
+- All three versions now fully aligned and working
+- Complete bug fixes for production use
