@@ -66,8 +66,8 @@ Server User:    @ | @home | @var | @opt | @srv | @data
 ## Available Versions
 
 ### Python
-- **`btrbk_restore.py`** - Simple CLI version with text menu
-- **`btrbk_restore_tui_pro.py`** - Professional TUI interface with persistent configuration and dynamic columns
+- **`btrbk_tui.py`** - Simple CLI version with text menu
+- **`btrbk_tui_pro.py`** - Professional TUI interface with persistent configuration and dynamic columns
 
 ### Rust
 - **`btrbk_tui_rust/`** - High-performance TUI version written in Rust with ncurses (identical to Python Pro version)
@@ -105,12 +105,12 @@ The tool assumes by default:
 
 ### Python CLI Version
 ```bash
-sudo ./btrbk_restore.py
+sudo ./btrbk_tui.py
 ```
 
 ### Python Professional TUI Version
 ```bash
-sudo ./btrbk_restore_tui_pro.py
+sudo ./btrbk_tui_pro.py
 ```
 
 ### Rust TUI Version (identical to Python Pro)
@@ -121,7 +121,7 @@ sudo ./target/release/btrbk_tui
 
 ## Features
 
-### CLI Version (`btrbk_restore.py`)
+### CLI Version (`btrbk_tui.py`)
 - **Numbered list** of all snapshots organized by type
 - **Number-based selection** with simple interface
 - **Complete dynamic support** for any configuration (@, @home, @games, @custom, @backup, etc.)
@@ -129,7 +129,7 @@ sudo ./target/release/btrbk_tui
 - **Automatic management** of .BROKEN backups
 - **Automatic detection** of all snapshot types present
 
-### Professional TUI Version (`btrbk_restore_tui_pro.py`)
+### Professional TUI Version (`btrbk_tui_pro.py`)
 - **Dynamic interface**: Columns that automatically adapt to groups found
 - **Persistent configuration**: Automatic saving to `~/.config/btrbk_tui/config.json`
 - **Advanced navigation**: Arrow keys for fluid navigation
@@ -217,7 +217,7 @@ The tool automatically handles snapshots with this nomenclature:
 
 ## Desktop File
 
-Includes `snapshot-restore.desktop` for desktop environment integration.
+Includes `btrbk-tui.desktop` for desktop environment integration.
 
 ## Security
 
@@ -272,13 +272,13 @@ Both TUI versions (Python Pro and Rust) share the configuration saved at:
 
 ## Which Version to Choose?
 
-### **CLI (`btrbk_restore.py`)**
+### **CLI (`btrbk_tui.py`)**
 - ✅ Occasional or sporadic use
 - ✅ Automated scripts
 - ✅ Resource-limited environments
 - ✅ When only basic functionality is needed
 
-### **TUI Pro (`btrbk_restore_tui_pro.py`)**
+### **TUI Pro (`btrbk_tui_pro.py`)**
 - ✅ Frequent and interactive use
 - ✅ Advanced configuration and customization
 - ✅ When Python is preferred for modifications
@@ -322,13 +322,13 @@ Both TUI versions (Python Pro and Rust) share the configuration saved at:
 ```
 btrbk_tui/
 ├── README.md                      # Complete documentation
-├── btrbk_restore.py              # Simple CLI version
-├── btrbk_restore_tui_pro.py      # Python professional TUI version
+├── btrbk_tui.py                  # Simple CLI version
+├── btrbk_tui_pro.py              # Python professional TUI version
 ├── btrbk_tui_rust/           # Rust professional TUI version
 │   ├── Cargo.toml               # Rust configuration (edition 2021)
 │   ├── src/main.rs              # Rust source code
 │   └── target/release/          # Compiled binary
-├── snapshot-restore.desktop      # Desktop file for DE integration
+├── btrbk-tui.desktop             # Desktop file for DE integration
 └── .git/                         # Git repository
 ```
 
@@ -350,7 +350,7 @@ btrbk_tui/
 
 ## Typical Usage Workflow
 
-1. **Startup**: `sudo ./btrbk_restore_tui_pro.py` or Rust version
+1. **Startup**: `sudo ./btrbk_tui_pro.py` or Rust version
 2. **Navigation**: Use arrows to explore available snapshots
 3. **Configuration**: Press `S` to modify settings if needed
 4. **Snapshot creation**: Use `I` to create new snapshots with btrbk
@@ -387,7 +387,7 @@ git clone https://github.com/rylos/btrbk_tui.git
 cd btrbk_tui
 
 # Make scripts executable
-chmod +x btrbk_restore.py btrbk_restore_tui_pro.py
+chmod +x btrbk_tui.py btrbk_tui_pro.py
 
 # For Rust version
 cd btrbk_tui_rust
@@ -395,7 +395,7 @@ cargo build --release
 cd ..
 
 # Run (requires root privileges)
-sudo ./btrbk_restore_tui_pro.py
+sudo ./btrbk_tui_pro.py
 ```
 
 ### Requirements Check
