@@ -1,4 +1,4 @@
-# BTRBK Restore Tool v2.2 - Project Overview
+# BTRBK TUI v2.2 - Project Overview
 
 ## Current Version: v2.2 - Bug Fixes & Major Improvements
 
@@ -39,10 +39,10 @@
 
 ### 📁 Project Structure:
 ```
-btrbk_restore/
+btrbk_tui/
 ├── btrbk_restore.py              # CLI version (simple)
 ├── btrbk_restore_tui_pro.py      # Python TUI (professional)
-├── btrbk_restore_rust/           # Rust TUI (high-performance)
+├── btrbk_tui_rust/               # Rust TUI (high-performance)
 │   ├── src/main.rs              # Rust source
 │   └── target/release/          # Compiled binary
 └── README.md                     # Complete documentation

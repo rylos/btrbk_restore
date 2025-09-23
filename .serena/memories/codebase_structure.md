@@ -22,7 +22,7 @@
 - **Dependencies**: curses, json, os, subprocess, sys, datetime, pathlib, typing
 - **Size**: ~1000+ righe
 
-### btrbk_restore_rust/ (Rust Version)
+### btrbk_tui_rust/ (Rust Version)
 - **Purpose**: Versione TUI ad alte prestazioni identica alla Pro Python
 - **Structure**:
   - `Cargo.toml`: Configurazione progetto Rust
@@ -31,7 +31,7 @@
 - **Features**: Identiche alla versione Python Pro
 
 ## Configuration
-- **Shared Config**: `~/.config/btrbk_restore/config.json`
+- **Shared Config**: `~/.config/btrbk_tui/config.json`
 - **Default Paths**: 
   - Pool: `/mnt/btr_pool`
   - Snapshots: `/mnt/btr_pool/btrbk_snapshots`

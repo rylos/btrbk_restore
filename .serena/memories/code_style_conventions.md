@@ -21,10 +21,10 @@
 
 ## File Structure
 ```
-btrbk_restore/
+btrbk_tui/
 ├── btrbk_restore.py              # CLI version
 ├── btrbk_restore_tui_pro.py      # TUI Pro Python
-├── btrbk_restore_rust/           # Rust TUI version
+├── btrbk_tui_rust/               # Rust TUI version
 │   ├── Cargo.toml
 │   └── src/main.rs
 ├── README.md

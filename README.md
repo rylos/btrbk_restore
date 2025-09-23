@@ -70,7 +70,7 @@ Server User:    @ | @home | @var | @opt | @srv | @data
 - **`btrbk_restore_tui_pro.py`** - Professional TUI interface with persistent configuration and dynamic columns
 
 ### Rust
-- **`btrbk_restore_rust/`** - High-performance TUI version written in Rust with ncurses (identical to Python Pro version)
+- **`btrbk_tui_rust/`** - High-performance TUI version written in Rust with ncurses (identical to Python Pro version)
 
 ## Prerequisites
 
@@ -89,7 +89,7 @@ python3 (with curses module included)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Build the project
-cd btrbk_restore_rust
+cd btrbk_tui_rust
 cargo build --release
 ```
 
@@ -99,7 +99,7 @@ The tool assumes by default:
 - **Btrfs Pool**: `/mnt/btr_pool`
 - **Snapshots directory**: `/mnt/btr_pool/btrbk_snapshots`
 
-**Shared Configuration**: The TUI Pro (Python) and Rust versions share the same JSON configuration file at `~/.config/btrbk_restore/config.json`, ensuring a completely consistent user experience.
+**Shared Configuration**: The TUI Pro (Python) and Rust versions share the same JSON configuration file at `~/.config/btrbk_tui/config.json`, ensuring a completely consistent user experience.
 
 ## Usage
 
@@ -115,8 +115,8 @@ sudo ./btrbk_restore_tui_pro.py
 
 ### Rust TUI Version (identical to Python Pro)
 ```bash
-cd btrbk_restore_rust
-sudo ./target/release/btrbk_restore
+cd btrbk_tui_rust
+sudo ./target/release/btrbk_tui
 ```
 
 ## Features
@@ -131,7 +131,7 @@ sudo ./target/release/btrbk_restore
 
 ### Professional TUI Version (`btrbk_restore_tui_pro.py`)
 - **Dynamic interface**: Columns that automatically adapt to groups found
-- **Persistent configuration**: Automatic saving to `~/.config/btrbk_restore/config.json`
+- **Persistent configuration**: Automatic saving to `~/.config/btrbk_tui/config.json`
 - **Advanced navigation**: Arrow keys for fluid navigation
 - **Complete settings screen**: `S` key for advanced configuration
 - **Configurable settings**: Directories, auto-cleanup, confirmations, timestamps
@@ -142,7 +142,7 @@ sudo ./target/release/btrbk_restore
 - **Smart purge**: Automatic cleanup of old snapshots
 - **Reboot system**: Visual indicators and dedicated shortcuts
 
-### Rust TUI Version (`btrbk_restore_rust/`)
+### Rust TUI Version (`btrbk_tui_rust/`)
 - **Optimized performance**: Native Rust implementation
 - **Identical interface**: Layout and functionality identical to Python Pro version
 - **Shared configuration**: Uses exactly the same JSON file as Python version
@@ -241,7 +241,7 @@ Includes `snapshot-restore.desktop` for desktop environment integration.
 
 Both TUI versions (Python Pro and Rust) share the configuration saved at:
 ```
-~/.config/btrbk_restore/config.json
+~/.config/btrbk_tui/config.json
 ```
 
 ### Configurable settings:
@@ -286,7 +286,7 @@ Both TUI versions (Python Pro and Rust) share the configuration saved at:
 - ✅ Complete snapshot management
 - ✅ Dynamic interface that adapts to any configuration
 
-### **Rust (`btrbk_restore_rust/`)**
+### **Rust (`btrbk_tui_rust/`)**
 - ✅ Maximum performance and speed
 - ✅ Systems with limited or absent Python
 - ✅ Production environments
@@ -320,11 +320,11 @@ Both TUI versions (Python Pro and Rust) share the configuration saved at:
 ## Project Structure
 
 ```
-btrbk_restore/
+btrbk_tui/
 ├── README.md                      # Complete documentation
 ├── btrbk_restore.py              # Simple CLI version
 ├── btrbk_restore_tui_pro.py      # Python professional TUI version
-├── btrbk_restore_rust/           # Rust professional TUI version
+├── btrbk_tui_rust/           # Rust professional TUI version
 │   ├── Cargo.toml               # Rust configuration (edition 2021)
 │   ├── src/main.rs              # Rust source code
 │   └── target/release/          # Compiled binary
@@ -383,14 +383,14 @@ Contributions welcome! The project demonstrates implementing the same functional
 ### Quick Start
 ```bash
 # Clone the repository
-git clone https://github.com/rylos/btrbk_restore.git
-cd btrbk_restore
+git clone https://github.com/rylos/btrbk_tui.git
+cd btrbk_tui
 
 # Make scripts executable
 chmod +x btrbk_restore.py btrbk_restore_tui_pro.py
 
 # For Rust version
-cd btrbk_restore_rust
+cd btrbk_tui_rust
 cargo build --release
 cd ..
 

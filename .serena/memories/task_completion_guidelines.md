@@ -10,7 +10,7 @@
    sudo ./btrbk_restore_tui_pro.py  # Test TUI Pro
    
    # For Rust changes
-   cd btrbk_restore_rust
+   cd btrbk_tui_rust
    cargo build --release
    sudo ./target/release/btrbk_restore
    ```
@@ -22,7 +22,7 @@
    python3 -m py_compile btrbk_restore_tui_pro.py
    
    # Rust build check
-   cd btrbk_restore_rust && cargo check
+   cd btrbk_tui_rust && cargo check
    ```
 
 ### Documentation Updates

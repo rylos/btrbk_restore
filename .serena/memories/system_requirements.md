@@ -40,6 +40,6 @@ libc = "0.2"                  # System calls
 - **Desktop Environment**: Testato su KDE Plasma 6, compatibile con altri DE
 
 ## Runtime Paths
-- **Configuration**: `~/.config/btrbk_restore/config.json`
+- **Configuration**: `~/.config/btrbk_tui/config.json`
 - **Default Pool**: `/mnt/btr_pool`
 - **Default Snapshots**: `/mnt/btr_pool/btrbk_snapshots`

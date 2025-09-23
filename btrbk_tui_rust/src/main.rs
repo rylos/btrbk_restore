@@ -44,7 +44,7 @@ impl App {
         let config_path = dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join(".config")
-            .join("btrbk_restore")
+            .join("btrbk_tui")
             .join("config.json");
         
         let mut app = App {
@@ -540,7 +540,7 @@ impl App {
     fn draw_header(&self) {
         let (_, width) = get_max_yx();
         
-        let title = "BTRBK Restore Tool v2.2";
+        let title = "BTRBK TUI v2.2";
         attron(COLOR_PAIR(5) | A_BOLD());
         let centered_title = format!("{:^width$}", title, width = width as usize);
         mvaddstr(0, 0, &centered_title[..std::cmp::min(centered_title.len(), width as usize - 1)]);
@@ -578,20 +578,27 @@ impl App {
     fn draw_status(&mut self) {
         let (height, width) = get_max_yx();
         
-        // Show reboot warning if needed (persistent)
-        if self.reboot_needed {
-            attron(COLOR_PAIR(4) | A_BOLD());  // Yellow/Warning color
-            let warning_msg = "WARNING: REBOOT REQUIRED - Press H to reboot system";
-            mvaddstr(height - 3, 0, &warning_msg[..std::cmp::min(warning_msg.len(), width as usize - 1)]);
-            attroff(COLOR_PAIR(4) | A_BOLD());
-        } else if !self.status_message.is_empty() && self.status_timeout > 0 {
-            // Show temporary status messages
+        // Show temporary status messages first (if active)
+        if !self.status_message.is_empty() && self.status_timeout > 0 {
             attron(COLOR_PAIR(6));
             mvaddstr(height - 3, 0, &self.status_message[..std::cmp::min(self.status_message.len(), width as usize - 1)]);
             attroff(COLOR_PAIR(6));
             self.status_timeout -= 1;
         } else if self.status_timeout <= 0 {
             self.status_message.clear();
+            // Show reboot warning only when no temporary messages are active
+            if self.reboot_needed {
+                attron(COLOR_PAIR(4) | A_BOLD());  // Yellow/Warning color
+                let warning_msg = "WARNING: REBOOT REQUIRED - Press H to reboot system";
+                mvaddstr(height - 3, 0, &warning_msg[..std::cmp::min(warning_msg.len(), width as usize - 1)]);
+                attroff(COLOR_PAIR(4) | A_BOLD());
+            }
+        } else if self.reboot_needed && self.status_message.is_empty() {
+            // Show reboot warning when no temporary messages
+            attron(COLOR_PAIR(4) | A_BOLD());
+            let warning_msg = "WARNING: REBOOT REQUIRED - Press H to reboot system";
+            mvaddstr(height - 3, 0, &warning_msg[..std::cmp::min(warning_msg.len(), width as usize - 1)]);
+            attroff(COLOR_PAIR(4) | A_BOLD());
         }
     }
     
@@ -906,7 +913,7 @@ impl App {
             }
             114 | 82 => {  // 'r' or 'R'
                 // Always refresh
-                self.set_status("Refreshed snapshot list", 50);
+                self.set_status("Operation cancelled", 30);
             }
             104 | 72 => {  // 'h' or 'H'
                 // Reboot if needed
@@ -914,48 +921,48 @@ impl App {
                     if self.confirm_dialog("Reboot system now?") {
                         run_command(&["reboot"]);
                     } else {
-                        self.set_status("Reboot cancelled", 50);
+                        self.set_status("Operation cancelled", 30);
                     }
                 } else {
-                    self.set_status("No reboot needed", 50);
+                    self.set_status("Operation cancelled", 30);
                 }
             }
             112 | 80 => {  // 'p' or 'P'
                 // Purge old snapshots
                 if self.confirm_dialog("Purge old snapshots (keep only most recent)?") {
-                    self.set_status("Purging old snapshots...", 100);
+                    self.set_status("Processing...", 30);
                     refresh();
                     
                     let (deleted_count, _deleted_list) = self.purge_old_snapshots();
                     
                     if deleted_count == -1 {
-                        self.set_status("Error during purge operation!", 100);
+                        self.set_status("Processing...", 30);
                     } else if deleted_count == 0 {
-                        self.set_status("No old snapshots to purge", 100);
+                        self.set_status("Processing...", 30);
                     } else {
                         self.set_status(&format!("Purged {} old snapshots successfully", deleted_count), 150);
                     }
                 } else {
-                    self.set_status("Purge cancelled", 50);
+                    self.set_status("Operation cancelled", 30);
                 }
             }
             98 | 66 => {  // 'b' or 'B'
                 // Clean all .BROKEN subvolumes
                 if self.confirm_dialog("Delete all .BROKEN subvolumes?") {
-                    self.set_status("Cleaning .BROKEN subvolumes...", 100);
+                    self.set_status("Processing...", 30);
                     refresh();
                     
                     let (deleted_count, _deleted_list) = self.clean_broken_subvolumes();
                     
                     if deleted_count == -1 {
-                        self.set_status("Error during cleanup operation!", 100);
+                        self.set_status("Processing...", 30);
                     } else if deleted_count == 0 {
-                        self.set_status("No .BROKEN subvolumes found", 100);
+                        self.set_status("Processing...", 30);
                     } else {
                         self.set_status(&format!("Cleaned {} .BROKEN subvolumes successfully", deleted_count), 150);
                     }
                 } else {
-                    self.set_status("Cleanup cancelled", 50);
+                    self.set_status("Operation cancelled", 30);
                 }
             }
             105 | 73 => {  // 'i' or 'I'
@@ -963,12 +970,12 @@ impl App {
                 if self.confirm_dialog("Create new snapshots with btrbk?") {
                     let (success, message) = self.create_snapshot();
                     if success {
-                        self.set_status("New snapshots created successfully!", 150);
+                        self.set_status("Snapshots created successfully", 30);
                     } else {
                         self.set_status(&format!("Snapshot creation failed: {}", message), 150);
                     }
                 } else {
-                    self.set_status("Snapshot creation cancelled", 50);
+                    self.set_status("Operation cancelled", 30);
                 }
             }
             _ => {}
@@ -1000,18 +1007,18 @@ impl App {
         };
         
         if !self.confirm_dialog(&format!("Restore {} snapshot?", snapshot_type)) {
-            self.set_status("Restoration cancelled", 50);
+            self.set_status("Operation cancelled", 30);
             return;
         }
         
-        self.set_status("Restoring snapshot...", 100);
+        self.set_status("Processing...", 30);
         refresh();
         
         if self.restore_snapshot(snapshot, snapshot_type) {
             self.reboot_needed = true;  // Set reboot flag per TUTTI i restore
-            self.set_status(&format!("{} snapshot restored! Press H to reboot when ready", snapshot_type), 200);
+            self.set_status(&format!("{} snapshot restored! Press H to reboot when ready", snapshot_type), 30);
         } else {
-            self.set_status("Failed to restore snapshot!", 100);
+            self.set_status("Processing...", 30);
         }
     }
     
@@ -1035,9 +1042,9 @@ impl App {
             }
             115 | 83 => {  // 's' or 'S'
                 if self.save_config() {
-                    self.set_status("Settings saved manually!", 50);
+                    self.set_status("Operation cancelled", 30);
                 } else {
-                    self.set_status("Failed to save settings!", 50);
+                    self.set_status("Operation cancelled", 30);
                 }
             }
             27 => {  // ESC
@@ -1098,7 +1105,7 @@ impl App {
                     self.save_config();
                     self.set_status(&format!("Updated {}", field_name), 50);
                 } else {
-                    self.set_status("Edit cancelled", 50);
+                    self.set_status("Operation cancelled", 30);
                 }
             }
             2 | 3 | 4 => {  // Boolean settings
@@ -1113,17 +1120,17 @@ impl App {
             2 => {
                 self.config.auto_cleanup = !self.config.auto_cleanup;
                 self.save_config();
-                self.set_status("Toggled auto_cleanup", 50);
+                self.set_status("Operation cancelled", 30);
             }
             3 => {
                 self.config.confirm_actions = !self.config.confirm_actions;
                 self.save_config();
-                self.set_status("Toggled confirm_actions", 50);
+                self.set_status("Operation cancelled", 30);
             }
             4 => {
                 self.config.show_timestamps = !self.config.show_timestamps;
                 self.save_config();
-                self.set_status("Toggled show_timestamps", 50);
+                self.set_status("Operation cancelled", 30);
             }
             _ => {}
         }

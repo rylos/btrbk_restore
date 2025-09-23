@@ -1,5 +1,5 @@
 [package]
-name = "btrbk_restore"
+name = "btrbk_tui"
 version = "2.2.0"
 edition = "2024"
 

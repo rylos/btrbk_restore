@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 # Configuration file path
-CONFIG_FILE = Path.home() / ".config" / "btrbk_restore" / "config.json"
+CONFIG_FILE = Path.home() / ".config" / "btrbk_tui" / "config.json"
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -287,7 +287,7 @@ class TUIApp:
         height, width = stdscr.getmaxyx()
         
         # Title bar
-        title = "BTRBK Restore Tool v2.2"
+        title = "BTRBK TUI v2.2"
         try:
             stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
             stdscr.addstr(0, 0, title.center(width)[:width-1])
@@ -332,17 +332,8 @@ class TUIApp:
         """Draw status message if any."""
         height, width = stdscr.getmaxyx()
         
-        # Show reboot warning if needed (persistent)
-        if self.reboot_needed:
-            try:
-                stdscr.attron(curses.color_pair(4) | curses.A_BOLD)  # Yellow/Warning color
-                warning_msg = "⚠ REBOOT REQUIRED - Press H to reboot system ⚠"
-                stdscr.addstr(height - 3, 0, warning_msg[:width-1].ljust(width-1))
-                stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
-            except curses.error:
-                pass
-        elif self.status_message and self.status_timeout > 0:
-            # Show temporary status messages
+        # Show temporary status messages first (if active)
+        if self.status_message and self.status_timeout > 0:
             try:
                 stdscr.attron(curses.color_pair(6))
                 stdscr.addstr(height - 3, 0, self.status_message[:width-1].ljust(width-1))
@@ -352,8 +343,26 @@ class TUIApp:
             self.status_timeout -= 1
         elif self.status_timeout <= 0:
             self.status_message = ""
+            # Show reboot warning only when no temporary messages are active
+            if self.reboot_needed:
+                try:
+                    stdscr.attron(curses.color_pair(4) | curses.A_BOLD)  # Yellow/Warning color
+                    warning_msg = "⚠ REBOOT REQUIRED - Press H to reboot system ⚠"
+                    stdscr.addstr(height - 3, 0, warning_msg[:width-1].ljust(width-1))
+                    stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+                except curses.error:
+                    pass
+        elif self.reboot_needed and not self.status_message:
+            # Show reboot warning when no temporary messages
+            try:
+                stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+                warning_msg = "⚠ REBOOT REQUIRED - Press H to reboot system ⚠"
+                stdscr.addstr(height - 3, 0, warning_msg[:width-1].ljust(width-1))
+                stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+            except curses.error:
+                pass
     
-    def set_status(self, message: str, timeout: int = 50):
+    def set_status(self, message: str, timeout: int = 30):
         """Set status message with timeout."""
         self.status_message = message
         self.status_timeout = timeout
@@ -790,33 +799,33 @@ class TUIApp:
         elif key in [ord('p'), ord('P')]:
             # Purge old snapshots
             if self.confirm_dialog(stdscr, "Purge old snapshots (keep only most recent)?"):
-                self.set_status("Purging old snapshots...", 100)
+                self.set_status(100, 30)
                 stdscr.refresh()
                 
                 deleted_count, deleted_list = self.purge_old_snapshots()
                 
                 if deleted_count == -1:
-                    self.set_status("Error during purge operation!", 100)
+                    self.set_status(100, 30)
                 elif deleted_count == 0:
-                    self.set_status("No old snapshots to purge", 100)
+                    self.set_status(100, 30)
                 else:
-                    self.set_status(f"Purged {deleted_count} old snapshots successfully", 150)
+                    self.set_status(150, 30)
             else:
                 self.set_status("Purge cancelled")
         elif key in [ord('b'), ord('B')]:
             # Clean all .BROKEN subvolumes
             if self.confirm_dialog(stdscr, "Delete all .BROKEN subvolumes?"):
-                self.set_status("Cleaning .BROKEN subvolumes...", 100)
+                self.set_status(100, 30)
                 stdscr.refresh()
                 
                 deleted_count, deleted_list = self.clean_broken_subvolumes()
                 
                 if deleted_count == -1:
-                    self.set_status("Error during cleanup operation!", 100)
+                    self.set_status(100, 30)
                 elif deleted_count == 0:
-                    self.set_status("No .BROKEN subvolumes found", 100)
+                    self.set_status(100, 30)
                 else:
-                    self.set_status(f"Cleaned {deleted_count} .BROKEN subvolumes successfully", 150)
+                    self.set_status(150, 30)
             else:
                 self.set_status("Cleanup cancelled")
         elif key in [ord('i'), ord('I')]:
@@ -824,9 +833,9 @@ class TUIApp:
             if self.confirm_dialog(stdscr, "Create new snapshots with btrbk?"):
                 success, message = self.create_snapshot(stdscr)
                 if success:
-                    self.set_status("New snapshots created successfully!", 150)
+                    self.set_status(150, 30)
                 else:
-                    self.set_status(f"Snapshot creation failed: {message}", 150)
+                    self.set_status(150, 30)
             else:
                 self.set_status("Snapshot creation cancelled")
     
@@ -856,18 +865,25 @@ class TUIApp:
             return
         
         # Perform restoration
-        self.set_status("Restoring snapshot...", 100)
+        self.set_status("Restoring snapshot...", 30)
         stdscr.refresh()
         
         if self.snapshot_manager.restore_snapshot(snapshot, snapshot_type):
             self.reboot_needed = True  # Set reboot flag
-            self.set_status("Snapshot restored! Press H to reboot or continue working", 200)
+            self.set_status("Snapshot restored! Press H to reboot or continue working", 30)
             
             # Ask for immediate reboot
             if self.confirm_dialog(stdscr, "Reboot system now?"):
                 subprocess.run(["reboot"], capture_output=True)
         else:
-            self.set_status("Failed to restore snapshot!", 100)
+            self.set_status("Failed to restore snapshot!", 30)
+            self.set_status(200, 30)
+            
+            # Ask for immediate reboot
+            if self.confirm_dialog(stdscr, "Reboot system now?"):
+                subprocess.run(["reboot"], capture_output=True)
+        else:
+            self.set_status(100, 30)
     
     def handle_settings_input(self, stdscr, key):
         """Handle input for settings screen."""

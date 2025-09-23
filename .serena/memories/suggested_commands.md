@@ -20,7 +20,7 @@ python3 --version
 ### Rust Development
 ```bash
 # Build Rust version
-cd btrbk_restore_rust
+cd btrbk_tui_rust
 cargo build --release
 
 # Run Rust version (requires root)
@@ -43,7 +43,7 @@ ls -la
 ls -la /mnt/btr_pool/btrbk_snapshots/
 
 # View configuration
-cat ~/.config/btrbk_restore/config.json
+cat ~/.config/btrbk_tui/config.json
 ```
 
 ### Git Commands
@@ -67,5 +67,5 @@ sudo ./btrbk_restore.py
 sudo ./btrbk_restore_tui_pro.py
 
 # Test Rust build
-cd btrbk_restore_rust && cargo check
+cd btrbk_tui_rust && cargo check
 ```
