@@ -1,4 +1,4 @@
-# BTRBK Restore Tool
+# BTRBK TUI
 
 A comprehensive set of tools for restoring Btrfs snapshots created with btrbk, available in Python and Rust with different user interfaces.
 
