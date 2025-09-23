@@ -540,7 +540,7 @@ impl App {
     fn draw_header(&self) {
         let (_, width) = get_max_yx();
         
-        let title = "BTRBK TUI v2.2";
+        let title = "BTRBK TUI v2.5";
         attron(COLOR_PAIR(5) | A_BOLD());
         let centered_title = format!("{:^width$}", title, width = width as usize);
         mvaddstr(0, 0, &centered_title[..std::cmp::min(centered_title.len(), width as usize - 1)]);

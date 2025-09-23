@@ -143,7 +143,7 @@ def restore_snapshot(selected_snapshot, prefix):
 
 def main():
     """Main function."""
-    print("🔄 BTRBK Restore Tool v2.2 - Versione CLI Dinamica")
+    print("🔄 BTRBK TUI v2.5 - Versione CLI Dinamica")
     print("=" * 50)
     
     # Get snapshot groups dynamically

@@ -16,7 +16,7 @@ This project provides tools to easily restore Btrfs subvolume snapshots created 
 - System reboot with visual indicators
 - Optionally reboot the system after restoration
 
-## ✨ Features v2.2 - Bug Fixes & Improvements
+## ✨ Features v2.5 - Bug Fixes & Improvements
 
 ### 🔄 **Automatic Detection:**
 - **No longer limited** to 3 fixed types (@, @home, @games)

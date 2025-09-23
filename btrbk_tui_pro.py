@@ -287,7 +287,7 @@ class TUIApp:
         height, width = stdscr.getmaxyx()
         
         # Title bar
-        title = "BTRBK TUI v2.2"
+        title = "BTRBK TUI v2.5"
         try:
             stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
             stdscr.addstr(0, 0, title.center(width)[:width-1])
